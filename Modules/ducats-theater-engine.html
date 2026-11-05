@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AIM-X // DUCATS 3D UNIFIED THEATER & 9D SOVEREIGN ENGINE</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #030305;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #f0f0f5;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* HUD & UI Layer */
+        #hud-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(10, 10, 18, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 255, 204, 0.3);
+            border-radius: 12px;
+            padding: 12px 20px;
+        }
+
+        .brand {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: #00ffcc;
+            text-shadow: 0 0 10px rgba(0, 255, 204, 0.4);
+        }
+
+        .status-indicator {
+            font-size: 11px;
+            color: #ff5500;
+            background: rgba(255, 85, 0, 0.1);
+            border: 1px solid rgba(255, 85, 0, 0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+            letter-spacing: 1px;
+        }
+
+        /* Control Dock */
+        .control-dock {
+            background: rgba(10, 10, 18, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 420px;
+            width: 100%;
+            margin: 0 auto 10px auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+
+        .track-info {
+            font-size: 12px;
+            color: #aaa;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            background: linear-gradient(135deg, #00ffcc, #0066ff);
+            border: none;
+            color: #030305;
+            font-weight: 800;
+            font-size: 12px;
+            letter-spacing: 1px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
+            text-align: center;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: none;
+        }
+
+        #mp3-upload {
+            display: none;
+        }
+    </style>
+
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="hud-layer">
+        <header class="interactive">
+            <div class="brand">DUCATS // 9D THEATER ENGINE</div>
+            <div id="status-badge" class="status-indicator">STANDBY</div>
+        </header>
+
+        <div class="control-dock interactive">
+            <div id="track-title" class="track-info">Upload MP3 or use procedural harmonic wave generator.</div>
+            <div class="btn-group">
+                <button class="btn" id="upload-btn">SELECT MP3</button>
+                <button class="btn btn-secondary" id="toggle-play" disabled>PLAY / PAUSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile-Safe Audio Upload Input -->
+    <input type="file" id="mp3-upload" accept="audio/*,audio/mp3,audio/mpeg">
+
+    <script>
+        // --- 9D Sovereign & DUCATS Theater Engine Core ---
+        let scene, camera, renderer, theaterMesh;
+        let audioCtx, analyser, audioSource;
+        let dataArray;
+        let isPlaying = false;
+
+        const gridDim = 40;
+        let geometry, positions;
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x030305, 0.025);
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 20, 30);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // Create Unified 3D Theater Wave Topology (9D Phase Space)
+            geometry = new THREE.PlaneGeometry(35, 35, gridDim - 1, gridDim - 1);
+            geometry.rotateX(-Math.PI / 2);
+            positions = geometry.attributes.position;
+
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00ffcc,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.65
+            });
+
+            theaterMesh = new THREE.Mesh(geometry, material);
+            scene.add(theaterMesh);
+
+            createAmbientField();
+
+            window.addEventListener('resize', onWindowResize);
+            setupAudioPipeline();
+            animate();
+        }
+
+        // --- Ambient Field Particles ---
+        let particleSystem;
+        function createAmbientField() {
+            const count = 800;
+            const geom = new THREE.BufferGeometry();
+            const pos = new Float32Array(count * 3);
+
+            for(let i = 0; i < count * 3; i += 3) {
+                pos[i] = (Math.random() - 0.5) * 70;
+                pos[i+1] = Math.random() * 25 - 8;
+                pos[i+2] = (Math.random() - 0.5) * 70;
+            }
+
+            geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const mat = new THREE.PointsMaterial({ color: 0x0066ff, size: 0.18, transparent: true, opacity: 0.7 });
+            particleSystem = new THREE.Points(geom, mat);
+            scene.add(particleSystem);
+        }
+
+        // --- Bulletproof Mobile Audio Pipeline ---
+        function setupAudioPipeline() {
+            const uploadBtn = document.getElementById('upload-btn');
+            const fileInput = document.getElementById('mp3-upload');
+            const togglePlayBtn = document.getElementById('toggle-play');
+            const trackTitle = document.getElementById('track-title');
+            const statusBadge = document.getElementById('status-badge');
+
+            uploadBtn.addEventListener('click', () => fileInput.click());
+
+            fileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                trackTitle.innerText = `Loading: ${file.name}...`;
+                statusBadge.innerText = "DECODING";
+
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                }
+
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+                    if (audioSource) {
+                        try { audioSource.stop(); } catch(err) {}
+                    }
+
+                    analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 1024;
+                    analyser.smoothingTimeConstant = 0.85;
+
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                    audioSource = audioCtx.createBufferSource();
+                    audioSource.buffer = audioBuffer;
+                    audioSource.loop = true;
+                    audioSource.connect(analyser);
+                    analyser.connect(audioCtx.destination);
+
+                    audioSource.start(0);
+                    isPlaying = true;
+
+                    trackTitle.innerText = `Playing: ${file.name}`;
+                    statusBadge.innerText = "9D ACTIVE";
+                    togglePlayBtn.removeAttribute('disabled');
+
+                } catch (err) {
+                    console.error("Audio pipeline error:", err);
+                    trackTitle.innerText = "Error decoding audio file.";
+                    statusBadge.innerText = "ERROR";
+                }
+            });
+
+            togglePlayBtn.addEventListener('click', async () => {
+                if (!audioCtx) return;
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+                if (isPlaying) {
+                    audioCtx.suspend();
+                    isPlaying = false;
+                    statusBadge.innerText = "PAUSED";
+                } else {
+                    audioCtx.resume();
+                    isPlaying = true;
+                    statusBadge.innerText = "9D ACTIVE";
+                }
+            });
+        }
+
+        // --- Render & 9D Wave Simulation Loop ---
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+
+            if (analyser && dataArray && isPlaying) {
+                analyser.getByteFrequencyData(dataArray);
+
+                const count = positions.count;
+                for (let i = 0; i < count; i++) {
+                    const vx = positions.getX(i);
+                    const vz = positions.getZ(i);
+
+                    const bin = Math.floor(Math.abs(vx + 17.5) / 35 * (dataArray.length / 2));
+                    const amp = (dataArray[bin] / 255.0) * 5.0;
+
+                    const wave = Math.sin(vx * 0.4 + elapsedTime * 3.5) * Math.cos(vz * 0.4 + elapsedTime * 3.5);
+                    positions.setY(i, wave * amp);
+                }
+                positions.needsUpdate = true;
+            } else {
+                // Procedural harmonic 9D phase resonance when idle
+                const count = positions.count;
+                for (let i = 0; i < count; i++) {
+                    const vx = positions.getX(i);
+                    const vz = positions.getZ(i);
+                    const wave = Math.sin(vx * 0.3 + elapsedTime * 2) * Math.cos(vz * 0.3 + elapsedTime * 2) * 1.2;
+                    positions.setY(i, wave);
+                }
+                positions.needsUpdate = true;
+            }
+
+            // Cinematic camera orbit
+            camera.position.x = Math.sin(elapsedTime * 0.15) * 8;
+            camera.position.z = 30 + Math.cos(elapsedTime * 0.1) * 4;
+            camera.lookAt(0, 0, 0);
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
