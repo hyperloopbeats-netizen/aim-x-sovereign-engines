@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Black Glass Liquid OS — Isolated WebGL2 Game Runtime</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: #04070d;
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+    .glass-panel {
+      background: rgba(12, 19, 34, 0.78);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      border-radius: 12px;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(6, 10, 18, 0.88);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .btn {
+      background: rgba(30, 41, 59, 0.85);
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary {
+      background: rgba(2, 132, 199, 0.28);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #7dd3fc;
+    }
+    .btn-warn {
+      background: rgba(217, 119, 6, 0.22);
+      border-color: rgba(251, 191, 36, 0.45);
+      color: #fde68a;
+    }
+    .container { max-width: 720px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .card {
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .card:hover { border-color: rgba(56, 189, 248, 0.6); }
+    .card:active { transform: scale(0.98); }
+    .tag { font-size: 10px; color: #38bdf8; letter-spacing: 0.4px; }
+    .muted { font-size: 11px; color: #94a3b8; }
+    .toast {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      font-size: 12px;
+      color: #e2e8f0;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      display: none;
+      max-width: 92vw;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BLACK GLASS LIQUID OS HEADER -->
+  <header class="topbar">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <strong style="font-size:15px; color:#f8fafc;">Liquid OS</strong>
+      <span id="os-kernel-badge" class="tag">kclock-120 • ACTIVE</span>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button id="btn-test-fault" class="btn btn-warn">Test Fault Gate</button>
+      <button id="btn-pulse-dsp" class="btn btn-primary">Pulse DSP</button>
+    </div>
+  </header>
+
+  <!-- OS DESKTOP SHELL -->
+  <main id="os-desktop" class="container">
+    <!-- Main Brain Status -->
+    <section class="glass-panel" style="padding:14px;">
+      <div class="tag" style="margin-bottom:6px;">Main Brain • 26 Library Modules • Flow 73% • Fusion 100%</div>
+      <h2 style="font-size:18px; margin-bottom:4px;">Black Glass Liquid OS</h2>
+      <div class="muted" style="margin-bottom:10px;">audio-dsp → gl-compositor • 90/90 Daemons Active</div>
+      <div id="ipc-stream" style="font-size:11px; color:#7dd3fc; background:rgba(4,7,13,0.65); padding:8px 10px; border-radius:8px; border:1px solid rgba(56,189,248,0.15);">
+        [ipc-router] Ready — Tap any module below to run Swarm Consensus &amp; launch isolated 60Hz runtime.
+      </div>
+    </section>
+
+    <!-- Kernel Daemons Mini Strip -->
+    <section class="grid-2">
+      <div class="glass-panel" style="padding:10px;">
+        <div style="display:flex; justify-content:space-between;">
+          <strong style="font-size:12px;">kclock-120</strong>
+          <span class="tag" id="daemon-hz">120Hz</span>
+        </div>
+        <div class="muted" id="daemon-state">Background scheduler nominal</div>
+      </div>
+      <div class="glass-panel" style="padding:10px;">
+        <div style="display:flex; justify-content:space-between;">
+          <strong style="font-size:12px;">audio-dsp</strong>
+          <span class="tag" id="dsp-energy-readout">Synth 50%</span>
+        </div>
+        <div class="muted">Zero-crossing phase locked</div>
+      </div>
+    </section>
+
+    <!-- Launchable Isolated Game Modules -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+      <strong style="font-size:13px; color:#cbd5e1;">Upgraded Cluster Game Modules</strong>
+      <span class="muted">Tap to Mount</span>
+    </div>
+
+    <section class="grid-2" id="module-grid">
+      <div class="glass-panel card" data-module="quantum-city">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span class="tag">WebGL2 • 60Hz</span>
+          <span class="muted">Seg 2</span>
+        </div>
+        <strong style="font-size:14px; display:block; margin-bottom:3px;">Quantum City</strong>
+        <div class="muted">Cyber arena + sub-bass pulse discharge</div>
+      </div>
+
+      <div class="glass-panel card" data-module="doom-arena">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span class="tag">WebGL2 • 60Hz</span>
+          <span class="muted">Seg 1</span>
+        </div>
+        <strong style="font-size:14px; display:block; margin-bottom:3px;">Doom Arena</strong>
+        <div class="muted">High-speed swarm survival &amp; dash</div>
+      </div>
+
+      <div class="glass-panel card" data-module="trilateral">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span class="tag">WebGL2 • 60Hz</span>
+          <span class="muted">Seg 3</span>
+        </div>
+        <strong style="font-size:14px; display:block; margin-bottom:3px;">Trilateral</strong>
+        <div class="muted">Tri-node harmonic reflector field</div>
+      </div>
+
+      <div class="glass-panel card" data-module="aim-osx">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span class="tag">Three.js • 60Hz</span>
+          <span class="muted">Seg 3</span>
+        </div>
+        <strong style="font-size:14px; display:block; margin-bottom:3px;">AIM OSx Core</strong>
+        <div class="muted">Sentient game lattice &amp; raycast nodes</div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    /**
+     * =========================================================================
+     * PART 1: ISOLATED GAME RUNTIME & FIXED-STEP KERNEL (LiquidGameShell)
+     * =========================================================================
+     */
+    class LiquidGameShell {
+      constructor(config = {}) {
+        this.moduleId = config.moduleId || 'unnamed-module';
+        this.container = config.container || document.body;
+        this.ipcRouter = config.ipcRouter || null;
+        this.targetFps = 60;
+        this.fixedDt = 1 / this.targetFps;
+        this.maxFrameTime = 0.05;
+
+        this.accumulator = 0;
+        this.lastTime = 0;
+        this.isRunning = false;
+        this.rafId = null;
+
+        this.input = {
+          pointerActive: false,
+          pointerJustPressed: false,
+          x: 0,
+          y: 0,
+          ndcX: 0,
+          ndcY: 0,
+          keys: new Set(),
+          joystick: { dx: 0, dy: 0 },
+          aimJoystick: { dx: 0, dy: 0 },
+          dashTriggered: false
+        };
+
+        this.onInit = async () => {};
+        this.onFixedUpdate = () => {};
+        this.onRender = () => {};
+        this.onResize = () => {};
+        this.onDestroy = () => {};
+
+        this._boundLoop = this._loop.bind(this);
+        this._boundResize = this._handleResize.bind(this);
+        this._boundPointerDown = this._handlePointerDown.bind(this);
+        this._boundPointerMove = this._handlePointerMove.bind(this);
+        this._boundPointerUp = this._handlePointerUp.bind(this);
+        this._boundKeyDown = (e) => {
+          this.input.keys.add(e.code);
+          if (e.code === 'Space') this.input.dashTriggered = true;
+        };
+        this._boundKeyUp = (e) => this.input.keys.delete(e.code);
+      }
+
+      async mount() {
+        if (this.isRunning) return;
+
+        this.wrapper = document.createElement('div');
+        this.wrapper.id = `liquid-runtime-${this.moduleId}`;
+        Object.assign(this.wrapper.style, {
+          position: 'fixed',
+          inset: '0',
+          zIndex: '9999',
+          backgroundColor: '#04070d',
+          touchAction: 'none',
+          userSelect: 'none',
+          overflow: 'hidden'
+        });
+
+        this.canvas = document.createElement('canvas');
+        Object.assign(this.canvas.style, {
+          display: 'block',
+          width: '100%',
+          height: '100%'
+        });
+
+        this.wrapper.appendChild(this.canvas);
+        this.container.appendChild(this.wrapper);
+
+        this._bindEvents();
+        this._handleResize();
+
+        await this.onInit(this.canvas, this);
+
+        this.isRunning = true;
+        this.lastTime = performance.now();
+        this.rafId = requestAnimationFrame(this._boundLoop);
+        this._emitIPC('module.mounted', { status: 'isolated-60hz' });
+      }
+
+      _loop(now) {
+        if (!this.isRunning) return;
+        this.rafId = requestAnimationFrame(this._boundLoop);
+
+        let frameTime = (now - this.lastTime) / 1000;
+        this.lastTime = now;
+        if (frameTime > this.maxFrameTime) frameTime = this.maxFrameTime;
+
+        this.accumulator += frameTime;
+
+        while (this.accumulator >= this.fixedDt) {
+          this.onFixedUpdate(this.fixedDt, this.input);
+          this.input.pointerJustPressed = false;
+          this.input.dashTriggered = false;
+          this.accumulator -= this.fixedDt;
+        }
+
+        const alpha = this.accumulator / this.fixedDt;
+        this.onRender(alpha);
+      }
+
+      _updatePointerCoords(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const relX = clientX - rect.left;
+        const relY = clientY - rect.top;
+        this.input.x = relX;
+        this.input.y = relY;
+        this.input.ndcX = (relX / rect.width) * 2 - 1;
+        this.input.ndcY = -(relY / rect.height) * 2 + 1;
+      }
+
+      _handlePointerDown(e) {
+        this.input.pointerActive = true;
+        this.input.pointerJustPressed = true;
+        this._updatePointerCoords(e.clientX, e.clientY);
+      }
+
+      _handlePointerMove(e) {
+        this._updatePointerCoords(e.clientX, e.clientY);
+      }
+
+      _handlePointerUp() {
+        this.input.pointerActive = false;
+      }
+
+      _handleResize() {
+        if (!this.canvas) return;
+        const rect = this.wrapper.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        this.canvas.width = Math.floor(rect.width * dpr);
+        this.canvas.height = Math.floor(rect.height * dpr);
+        this.onResize(rect.width, rect.height, dpr);
+      }
+
+      _emitIPC(topic, payload) {
+        if (this.ipcRouter && typeof this.ipcRouter.emit === 'function') {
+          this.ipcRouter.emit({ source: this.moduleId, topic, timestamp: Date.now(), payload });
+        }
+      }
+
+      _bindEvents() {
+        window.addEventListener('resize', this._boundResize);
+        this.canvas.addEventListener('pointerdown', this._boundPointerDown);
+        window.addEventListener('pointermove', this._boundPointerMove);
+        window.addEventListener('pointerup', this._boundPointerUp);
+        window.addEventListener('keydown', this._boundKeyDown);
+        window.addEventListener('keyup', this._boundKeyUp);
+      }
+
+      destroy() {
+        this.isRunning = false;
+        if (this.rafId) cancelAnimationFrame(this.rafId);
+
+        window.removeEventListener('resize', this._boundResize);
+        this.canvas?.removeEventListener('pointerdown', this._boundPointerDown);
+        window.removeEventListener('pointermove', this._boundPointerMove);
+        window.removeEventListener('pointerup', this._boundPointerUp);
+        window.removeEventListener('keydown', this._boundKeyDown);
+        window.removeEventListener('keyup', this._boundKeyUp);
+
+        this.onDestroy();
+        if (this.wrapper && this.wrapper.parentNode) {
+          this.wrapper.parentNode.removeChild(this.wrapper);
+        }
+        this._emitIPC('module.unmounted', { status: 'restored-os-shell' });
+      }
+    }
+
+    /**
+     * =========================================================================
+     * PART 2: COLLAPSIBLE MOBILE HUD & MULTI-TOUCH DUAL JOYSTICKS
+     * =========================================================================
+     */
+    class LiquidMobileHUD {
+      constructor(shell, options = {}) {
+        this.shell = shell;
+        this.title = options.title || shell.moduleId;
+        this.leftStick = { active: false, pointerId: null, originX: 0, originY: 0, dx: 0, dy: 0 };
+        this.rightStick = { active: false, pointerId: null, originX: 0, originY: 0, dx: 0, dy: 0, downTime: 0 };
+        this.maxRadius = 44;
+
+        this._buildDOM();
+        this._bindTouchZones();
+      }
+
+      _buildDOM() {
+        this.root = document.createElement('div');
+        Object.assign(this.root.style, {
+          position: 'absolute',
+          inset: '0',
+          pointerEvents: 'none',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          color: '#e2e8f0',
+          zIndex: '10'
+        });
+
+        this.root.innerHTML = `
+          <div style="
+            display:flex; justify-content:space-between; align-items:center;
+            padding: 10px 14px; background: rgba(10, 16, 28, 0.78);
+            backdrop-filter: blur(12px); border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+            pointer-events: auto;
+          ">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="width:8px; height:8px; border-radius:50%; background:#38bdf8; box-shadow:0 0 8px #38bdf8;"></span>
+              <strong style="font-size:13px;">${this.title}</strong>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button id="hud-toggle-stats" class="btn" style="padding:4px 10px; font-size:11px;">HUD</button>
+              <button id="hud-exit-os" class="btn" style="
+                background:rgba(220,38,38,0.28); color:#fca5a5; border-color:rgba(248,113,113,0.45);
+                padding:4px 10px; font-size:11px;
+              ">Exit OS</button>
+            </div>
+          </div>
+
+          <div id="hud-drawer" style="
+            display:none; margin:8px 14px; padding:10px; border-radius:8px;
+            background:rgba(10, 16, 28, 0.85); backdrop-filter:blur(10px);
+            border:1px solid rgba(56, 189, 248, 0.22); font-size:11px; pointer-events:auto;
+          ">
+            <div id="hud-telemetry-text">Initializing telemetry...</div>
+            <div style="margin-top:4px; color:#94a3b8;">Left Pad: Move • Right Pad: Aim / Quick-Tap Dash • Tap Pillars: Charge</div>
+          </div>
+
+          <div id="zone-left" style="position:absolute; left:0; bottom:0; width:45%; height:44%; pointer-events:auto; touch-action:none;"></div>
+          <div id="zone-right" style="position:absolute; right:0; bottom:0; width:45%; height:44%; pointer-events:auto; touch-action:none;"></div>
+
+          <div id="stick-left-base" style="
+            display:none; position:absolute; width:88px; height:88px; border-radius:50%;
+            border:1px solid rgba(56,189,248,0.5); background:rgba(15,23,42,0.45);
+            transform:translate(-50%, -50%); pointer-events:none;
+          ">
+            <div id="stick-left-nub" style="
+              position:absolute; left:50%; top:50%; width:34px; height:34px; border-radius:50%;
+              background:rgba(56,189,248,0.85); transform:translate(-50%, -50%);
+            "></div>
+          </div>
+
+          <div id="stick-right-base" style="
+            display:none; position:absolute; width:88px; height:88px; border-radius:50%;
+            border:1px solid rgba(251,191,36,0.5); background:rgba(15,23,42,0.45);
+            transform:translate(-50%, -50%); pointer-events:none;
+          ">
+            <div id="stick-right-nub" style="
+              position:absolute; left:50%; top:50%; width:34px; height:34px; border-radius:50%;
+              background:rgba(251,191,36,0.85); transform:translate(-50%, -50%);
+            "></div>
+          </div>
+        `;
+
+        this.shell.wrapper.appendChild(this.root);
+
+        const drawer = this.root.querySelector('#hud-drawer');
+        this.root.querySelector('#hud-toggle-stats').onclick = () => {
+          drawer.style.display = drawer.style.display === 'none' ? 'block' : 'none';
+        };
+        this.root.querySelector('#hud-exit-os').onclick = () => this.shell.destroy();
+        this.telemetryEl = this.root.querySelector('#hud-telemetry-text');
+      }
+
+      _bindTouchZones() {
+        const setupZone = (zoneId, stickObj, baseId, nubId, onMoveCallback, onQuickTap) => {
+          const zone = this.root.querySelector(zoneId);
+          const base = this.root.querySelector(baseId);
+          const nub = this.root.querySelector(nubId);
+
+          zone.addEventListener('pointerdown', (e) => {
+            if (stickObj.active) return;
+            e.stopPropagation();
+            zone.setPointerCapture(e.pointerId);
+            stickObj.active = true;
+            stickObj.pointerId = e.pointerId;
+            stickObj.originX = e.clientX;
+            stickObj.originY = e.clientY;
+            stickObj.downTime = performance.now();
+
+            base.style.display = 'block';
+            base.style.left = `${e.clientX}px`;
+            base.style.top = `${e.clientY}px`;
+            nub.style.transform = 'translate(-50%, -50%)';
+          });
+
+          zone.addEventListener('pointermove', (e) => {
+            if (!stickObj.active || e.pointerId !== stickObj.pointerId) return;
+            e.stopPropagation();
+
+            let rawX = e.clientX - stickObj.originX;
+            let rawY = e.clientY - stickObj.originY;
+            const dist = Math.hypot(rawX, rawY);
+
+            if (dist > this.maxRadius) {
+              rawX = (rawX / dist) * this.maxRadius;
+              rawY = (rawY / dist) * this.maxRadius;
+            }
+
+            stickObj.dx = rawX / this.maxRadius;
+            stickObj.dy = rawY / this.maxRadius;
+            nub.style.transform = `translate(calc(-50% + ${rawX}px), calc(-50% + ${rawY}px))`;
+            onMoveCallback(stickObj.dx, stickObj.dy);
+          });
+
+          const release = (e) => {
+            if (e.pointerId !== stickObj.pointerId) return;
+            const heldMs = performance.now() - stickObj.downTime;
+            const movedDist = Math.hypot(stickObj.dx, stickObj.dy);
+            if (heldMs < 220 && movedDist < 0.25 && onQuickTap) {
+              onQuickTap();
+            }
+            stickObj.active = false;
+            stickObj.pointerId = null;
+            stickObj.dx = 0;
+            stickObj.dy = 0;
+            base.style.display = 'none';
+            onMoveCallback(0, 0);
+          };
+
+          zone.addEventListener('pointerup', release);
+          zone.addEventListener('pointercancel', release);
+        };
+
+        setupZone('#zone-left', this.leftStick, '#stick-left-base', '#stick-left-nub', (dx, dy) => {
+          this.shell.input.joystick.dx = dx;
+          this.shell.input.joystick.dy = dy;
+        });
+
+        setupZone(
+          '#zone-right',
+          this.rightStick,
+          '#stick-right-base',
+          '#stick-right-nub',
+          (dx, dy) => {
+            this.shell.input.aimJoystick.dx = dx;
+            this.shell.input.aimJoystick.dy = dy;
+          },
+          () => {
+            this.shell.input.dashTriggered = true;
+          }
+        );
+      }
+
+      updateTelemetry(text) {
+        if (this.telemetryEl) this.telemetryEl.textContent = text;
+      }
+    }
+
+    /**
+     * =========================================================================
+     * PART 3: SWARM CONSENSUS GATE & AUDIO-DSP BRIDGE
+     * =========================================================================
+     */
+    class SwarmConsensusValidator {
+      static evaluate(moduleConfig) {
+        const report = {
+          passed: true,
+          score: 100,
+          agents: {
+            alphaParser: 'valid',
+            betaEntropy: 'valid',
+            gammaHealer: 'valid',
+            deltaHash: `0x${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}`,
+            epsilonRouter: 'valid'
+          }
+        };
+
+        if (!moduleConfig || typeof moduleConfig.onFixedUpdate !== 'function') {
+          report.passed = false;
+          report.score = 45;
+          report.agents.alphaParser = 'FAULT: Missing fixed-step loop';
+        }
+        return report;
+      }
+    }
+
+    class LiquidAudioBridge {
+      constructor() {
+        this.subBass = 0.5;
+        this.highTransient = 0.2;
+        this.zeroCrossings = 0.14;
+        this.phase = 0;
+        this.boost = 0;
+      }
+
+      triggerPulse() {
+        this.boost = 1.0;
+      }
+
+      sample(dt) {
+        this.phase += dt * 2.4;
+        this.boost = Math.max(0, this.boost - dt * 1.4);
+        const baseWave = 0.5 + 0.5 * Math.sin(this.phase * 2.2);
+        this.subBass = Math.min(1.0, baseWave * 0.85 + this.boost * 0.65);
+        this.highTransient = Math.max(0, Math.sin(this.phase * 7.5));
+        this.zeroCrossings = 0.12 + 0.09 * Math.cos(this.phase);
+      }
+    }
+
+    /**
+     * =========================================================================
+     * LIQUID OS SHELL CONTROLLER & VERIFIED 3D GAME LAUNCHER
+     * =========================================================================
+     */
+    const LiquidOS = {
+      activeShell: null,
+      daemonPaused: false,
+      dsp: new LiquidAudioBridge(),
+
+      ipcRouter: {
+        emit(pkt) {
+          const streamEl = document.getElementById('ipc-stream');
+          if (streamEl) {
+            streamEl.textContent = `[${pkt.source} → ipc-router] ${pkt.topic} (${JSON.stringify(pkt.payload)})`;
+          }
+        }
+      },
+
+      setDaemonSuspended(suspended) {
+        this.daemonPaused = suspended;
+        const badge = document.getElementById('os-kernel-badge');
+        const hz = document.getElementById('daemon-hz');
+        const state = document.getElementById('daemon-state');
+        if (suspended) {
+          badge.textContent = 'kclock-120 • YIELDED TO GPU';
+          hz.textContent = 'IDLE';
+          state.textContent = 'Paused for isolated 60Hz game loop';
+        } else {
+          badge.textContent = 'kclock-120 • ACTIVE';
+          hz.textContent = '120Hz';
+          state.textContent = 'Background scheduler nominal';
+        }
+      },
+
+      showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.style.display = 'block';
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3400);
+      }
+    };
+
+    // Background OS telemetry ticker (automatically yields when a game runs)
+    setInterval(() => {
+      if (LiquidOS.daemonPaused) return;
+      LiquidOS.dsp.sample(0.25);
+      const readout = document.getElementById('dsp-energy-readout');
+      if (readout) readout.textContent = `Synth ${(LiquidOS.dsp.subBass * 100).toFixed(0)}%`;
+    }, 250);
+
+    const MODULE_PRESETS = {
+      'quantum-city': { title: 'Quantum City • WebGL2', primaryColor: 0x38bdf8, accentColor: 0xf59e0b, enemySpeed: 3.1 },
+      'doom-arena':   { title: 'Doom Arena • WebGL2',   primaryColor: 0xf43f5e, accentColor: 0xfacc15, enemySpeed: 4.4 },
+      'trilateral':   { title: 'Trilateral • WebGL2',   primaryColor: 0xa855f7, accentColor: 0x2dd4bf, enemySpeed: 3.6 },
+      'aim-osx':      { title: 'AIM OSx Core • 3D',     primaryColor: 0x22c55e, accentColor: 0x38bdf8, enemySpeed: 3.4 }
+    };
+
+    function launchVerifiedGame(moduleId, brokenTest = false) {
+      const preset = MODULE_PRESETS[moduleId] || MODULE_PRESETS['quantum-city'];
+
+      // 1. Run 5-Agent Swarm Consensus Gate before mounting
+      const candidateLogic = brokenTest ? null : { onFixedUpdate: () => {} };
+      const consensus = SwarmConsensusValidator.evaluate(candidateLogic);
+
+      if (!consensus.passed) {
+        LiquidOS.ipcRouter.emit({
+          source: 'swarm-consensus',
+          topic: 'module.blocked',
+          payload: { moduleId, score: consensus.score, reason: consensus.agents.alphaParser }
+        });
+        LiquidOS.showToast(`Swarm Consensus Blocked (${consensus.score}%): ${consensus.agents.alphaParser}`);
+        return;
+      }
+
+      LiquidOS.showToast(`Swarm Consensus 100% (${consensus.agents.deltaHash}) • Mounting ${preset.title}`);
+      LiquidOS.setDaemonSuspended(true);
+
+      const shell = new LiquidGameShell({ moduleId, ipcRouter: LiquidOS.ipcRouter });
+      LiquidOS.activeShell = shell;
+
+      let hud, scene, camera, renderer, player, pulseRing, raycaster;
+      const obstacles = [];
+      const enemies = [];
+      let spawnCooldown = 0;
+
+      const state = {
+        pos: new THREE.Vector3(0, 0.7, 0),
+        vel: new THREE.Vector3(0, 0, 0),
+        radius: 0.65,
+        dashTimer: 0,
+        score: 0
+      };
+
+      shell.onInit = async (canvas) => {
+        hud = new LiquidMobileHUD(shell, { title: preset.title });
+
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x04070d);
+        scene.fog = new THREE.FogExp2(0x04070d, 0.032);
+
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 120);
+        camera.position.set(0, 10, 13);
+
+        raycaster = new THREE.Raycaster();
+
+        scene.add(new THREE.AmbientLight(preset.primaryColor, 0.65));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
+        dirLight.position.set(8, 16, 10);
+        scene.add(dirLight);
+
+        scene.add(new THREE.GridHelper(40, 40, preset.primaryColor, 0x0f172a));
+
+        // Player Core
+        player = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.65, 1),
+          new THREE.MeshStandardMaterial({
+            color: preset.primaryColor,
+            emissive: preset.primaryColor,
+            emissiveIntensity: 0.45
+          })
+        );
+        player.position.copy(state.pos);
+        scene.add(player);
+
+        // Sub-Bass Discharge Halo
+        pulseRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.95, 1.22, 36),
+          new THREE.MeshBasicMaterial({ color: preset.accentColor, side: THREE.DoubleSide })
+        );
+        pulseRing.rotation.x = -Math.PI / 2;
+        pulseRing.position.y = 0.05;
+        scene.add(pulseRing);
+
+        // Grounded AABB Arena Pillars (Tap to charge)
+        const pillarGeo = new THREE.BoxGeometry(2, 2.6, 2);
+        [[-5.5, -5.5], [5.5, -5.5], [-5.5, 5.5], [5.5, 5.5]].forEach(([x, z]) => {
+          const mat = new THREE.MeshStandardMaterial({
+            color: 0x1e293b,
+            emissive: 0x000000,
+            roughness: 0.3
+          });
+          const mesh = new THREE.Mesh(pillarGeo, mat);
+          mesh.position.set(x, 1.3, z);
+          scene.add(mesh);
+          obstacles.push({ mesh, minX: x - 1, maxX: x + 1, minZ: z - 1, maxZ: z + 1, charged: false });
+        });
+      };
+
+      shell.onFixedUpdate = (dt, input) => {
+        LiquidOS.dsp.sample(dt);
+
+        // 1. Movement Input (Joystick + Keyboard)
+        let mx = input.joystick.dx;
+        let mz = input.joystick.dy;
+        if (input.keys.has('KeyA') || input.keys.has('ArrowLeft')) mx -= 1;
+        if (input.keys.has('KeyD') || input.keys.has('ArrowRight')) mx += 1;
+        if (input.keys.has('KeyW') || input.keys.has('ArrowUp')) mz -= 1;
+        if (input.keys.has('KeyS') || input.keys.has('ArrowDown')) mz += 1;
+
+        const len = Math.hypot(mx, mz);
+        if (len > 1) { mx /= len; mz /= len; }
+
+        if (input.dashTriggered && state.dashTimer <= 0) {
+          state.dashTimer = 0.22;
+          LiquidOS.dsp.triggerPulse();
+        }
+        if (state.dashTimer > 0) state.dashTimer -= dt;
+
+        const speed = state.dashTimer > 0 ? 19.0 : 8.8;
+        state.pos.x += mx * speed * dt;
+        state.pos.z += mz * speed * dt;
+
+        // Hard Floor & Arena Clamping
+        state.pos.y = 0.7;
+        state.pos.x = Math.max(-18.5, Math.min(18.5, state.pos.x));
+        state.pos.z = Math.max(-18.5, Math.min(18.5, state.pos.z));
+
+        // Circle-vs-AABB Pillar Collision Pushout
+        for (const obs of obstacles) {
+          const closestX = Math.max(obs.minX, Math.min(state.pos.x, obs.maxX));
+          const closestZ = Math.max(obs.minZ, Math.min(state.pos.z, obs.maxZ));
+          const dx = state.pos.x - closestX;
+          const dz = state.pos.z - closestZ;
+          const distSq = dx * dx + dz * dz;
+
+          if (distSq < state.radius * state.radius) {
+            const dist = Math.sqrt(distSq) || 0.001;
+            const overlap = state.radius - dist;
+            state.pos.x += (dx / dist) * overlap;
+            state.pos.z += (dz / dist) * overlap;
+          }
+        }
+
+        // Exact NDC Raycasting on Pillars
+        if (input.pointerJustPressed) {
+          raycaster.setFromCamera({ x: input.ndcX, y: input.ndcY }, camera);
+          const hits = raycaster.intersectObjects(obstacles.map((o) => o.mesh));
+          if (hits.length > 0) {
+            const hitObj = hits[0].object;
+            hitObj.material.emissive.setHex(preset.accentColor);
+            hitObj.material.emissiveIntensity = 0.75;
+            LiquidOS.dsp.triggerPulse();
+            state.score += 25;
+          }
+        }
+
+        // Update Player & Audio-Reactive Pulse Halo
+        player.position.set(state.pos.x, 0.7 + LiquidOS.dsp.subBass * 0.25, state.pos.z);
+        player.rotation.y += dt * (1.8 + LiquidOS.dsp.highTransient * 4.5);
+
+        const ringScale = 1.0 + LiquidOS.dsp.subBass * 1.65;
+        pulseRing.position.set(state.pos.x, 0.05, state.pos.z);
+        pulseRing.scale.set(ringScale, ringScale, 1);
+
+        // 2. Spawn Enemy Nodes on Sub-Bass Peaks
+        spawnCooldown -= dt;
+        if (LiquidOS.dsp.subBass > 0.78 && spawnCooldown <= 0 && enemies.length < 16) {
+          spawnCooldown = 0.95;
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 14 + Math.random() * 4;
+          const enemyMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(0.85, 0.85, 0.85),
+            new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0xbe123c, emissiveIntensity: 0.55 })
+          );
+          enemyMesh.position.set(Math.cos(angle) * dist, 0.5, Math.sin(angle) * dist);
+          scene.add(enemyMesh);
+          enemies.push(enemyMesh);
+        }
+
+        // 3. Enemy Tracking & Pulse Discharge Elimination
+        const dischargeRadius = 1.22 * ringScale;
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          const dx = state.pos.x - e.position.x;
+          const dz = state.pos.z - e.position.z;
+          const d = Math.hypot(dx, dz) || 0.001;
+
+          e.position.x += (dx / d) * preset.enemySpeed * dt;
+          e.position.z += (dz / d) * preset.enemySpeed * dt;
+          e.rotation.x += dt * 2.5;
+          e.rotation.z += dt * 1.8;
+
+          if (d < dischargeRadius && LiquidOS.dsp.subBass > 0.72) {
+            scene.remove(e);
+            e.geometry.dispose();
+            e.material.dispose();
+            enemies.splice(i, 1);
+            state.score += 100;
+          }
+        }
+
+        // Camera Follow + Right Joystick Orbit Offset
+        const aimOffsetX = input.aimJoystick.dx * 4.5;
+        const aimOffsetZ = input.aimJoystick.dy * 4.5;
+        camera.position.lerp(
+          new THREE.Vector3(state.pos.x + aimOffsetX, 10, state.pos.z + 12 + aimOffsetZ),
+          0.12
+        );
+        camera.lookAt(state.pos.x, 0.5, state.pos.z);
+
+        hud.updateTelemetry(
+          `SCORE: ${state.score} | SUB-BASS: ${(LiquidOS.dsp.subBass * 100).toFixed(0)}% | ZC: ${LiquidOS.dsp.zeroCrossings.toFixed(2)}`
+        );
+      };
+
+      shell.onRender = () => renderer.render(scene, camera);
+
+      shell.onResize = (w, h, dpr) => {
+        if (!renderer || !camera) return;
+        renderer.setPixelRatio(dpr);
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      };
+
+      shell.onDestroy = () => {
+        enemies.forEach((e) => { e.geometry.dispose(); e.material.dispose(); });
+        obstacles.forEach((o) => { o.geometry.dispose(); o.material.dispose(); });
+        renderer?.dispose();
+        LiquidOS.setDaemonSuspended(false);
+        LiquidOS.activeShell = null;
+      };
+
+      shell.mount();
+    }
+
+    // Wire OS Dashboard Interactions
+    document.querySelectorAll('#module-grid .card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const modId = card.getAttribute('data-module');
+        launchVerifiedGame(modId, false);
+      });
+    });
+
+    document.getElementById('btn-test-fault').addEventListener('click', () => {
+      launchVerifiedGame('corrupted-node', true);
+    });
+
+    document.getElementById('btn-pulse-dsp').addEventListener('click', () => {
+      LiquidOS.dsp.triggerPulse();
+      LiquidOS.ipcRouter.emit({
+        source: 'audio-dsp',
+        topic: 'dsp.pulse',
+        payload: { synthEnergy: '100%', phase: 'locked' }
+      });
+    });
+  </script>
+</body>
+</html>
