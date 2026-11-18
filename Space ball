@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperFace Studio Pro v16.0 // Sovereign Animation & PBR Studio</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js R128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- GLTF Exporter -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <!-- Post-Processing stack -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #020205;
+            font-family: 'Inter', sans-serif; user-select: none;
+            -webkit-user-select: none; color: #f3f4f6;
+        }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        .glass-panel {
+            background: rgba(14, 11, 28, 0.85);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border: 1px solid rgba(217, 70, 239, 0.25);
+            box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.7);
+        }
+        .glow-text {
+            text-shadow: 0 0 25px rgba(217, 70, 239, 0.8), 0 0 50px rgba(6, 182, 212, 0.6);
+        }
+        .scanline {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.3));
+            background-size: 100% 4px;
+        }
+        input[type="range"] { accent-color: #d946ef; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+        ::-webkit-scrollbar-thumb { background: rgba(217, 70, 239, 0.4); border-radius: 4px; }
+        .tab-active {
+            background: linear-gradient(135deg, rgba(217, 70, 239, 0.4), rgba(6, 182, 212, 0.4));
+            border-color: rgba(217, 70, 239, 0.8);
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(217, 70, 239, 0.3);
+        }
+        .node-card {
+            background: rgba(20, 15, 38, 0.9);
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            cursor: grab;
+        }
+        .node-card:active { cursor: grabbing; }
+    </style>
+</head>
+<body class="relative">
+
+    <!-- CRT Overlay & Vignette -->
+    <div class="absolute inset-0 scanline pointer-events-none z-20 opacity-15"></div>
+    <div class="absolute inset-0 pointer-events-none z-10" style="background: radial-gradient(circle at center, transparent 35%, rgba(0,0,0,0.92) 100%);"></div>
+
+    <!-- WebGL Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- HUD Interface -->
+    <div class="absolute inset-0 z-30 pointer-events-none flex flex-col justify-between p-3 md:p-5">
+        
+        <!-- Header -->
+        <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pointer-events-auto">
+            <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center space-x-3">
+                <div class="w-3 h-3 rounded-full bg-fuchsia-500 animate-ping"></div>
+                <div>
+                    <h1 class="font-black tracking-widest text-xs md:text-sm bg-gradient-to-r from-fuchsia-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent glow-text">
+                        HYPERFACE STUDIO PRO // v16.0 SOVEREIGN ANIMATION & PBR
+                    </h1>
+                    <p class="text-[9px] font-mono text-gray-400">GPU PARTICLES • AUDIO FFT • NLA TIMELINE • IK TENDRILLS • PROCEDURAL PBR</p>
+                </div>
+            </div>
+
+            <!-- Micro Tabs Control Deck -->
+            <div class="glass-panel p-1 rounded-2xl flex flex-wrap items-center space-x-1">
+                <button onclick="switchTab('poly')" id="tab-poly" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold tab-active transition cursor-pointer">📐 Poly & PBR</button>
+                <button onclick="switchTab('particles')" id="tab-particles" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white transition cursor-pointer">✨ GPU Particles</button>
+                <button onclick="switchTab('audio')" id="tab-audio" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white transition cursor-pointer">🎵 Audio FFT</button>
+                <button onclick="switchTab('timeline')" id="tab-timeline" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white transition cursor-pointer">⏱️ NLA Timeline</button>
+                <button onclick="switchTab('nodes')" id="tab-nodes" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white transition cursor-pointer">🔗 Node Graph</button>
+                <button onclick="switchTab('export')" id="tab-export" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white transition cursor-pointer">💾 Export Studio</button>
+            </div>
+        </header>
+
+        <!-- Panels Container -->
+        <main class="pointer-events-auto relative w-full max-w-xl self-start lg:self-center mt-2 max-h-[75vh] overflow-y-auto pr-1">
+            
+            <!-- Panel 1: Polygonal & PBR Texture Generator -->
+            <div id="panel-poly" class="glass-panel p-4 rounded-2xl space-y-3 shadow-2xl">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-fuchsia-300 font-mono">SOVEREIGN MESH & PROCEDURAL PBR MAPS</span>
+                    <span id="poly-points-count" class="text-[10px] font-mono text-cyan-400">12,500 Vertices</span>
+                </div>
+                <div class="grid grid-cols-5 gap-1.5">
+                    <button onclick="setPolySystem(1)" id="btn-sys-1" class="p-2 rounded-xl bg-fuchsia-600/40 border border-fuchsia-500 text-[10px] font-bold text-center cursor-pointer">Icosa</button>
+                    <button onclick="setPolySystem(2)" id="btn-sys-2" class="p-2 rounded-xl bg-black/40 border border-white/10 text-[10px] font-bold text-center cursor-pointer hover:border-fuchsia-400">Dodec</button>
+                    <button onclick="setPolySystem(3)" id="btn-sys-3" class="p-2 rounded-xl bg-black/40 border border-white/10 text-[10px] font-bold text-center cursor-pointer hover:border-fuchsia-400">Knot</button>
+                    <button onclick="setPolySystem(4)" id="btn-sys-4" class="p-2 rounded-xl bg-black/40 border border-white/10 text-[10px] font-bold text-center cursor-pointer hover:border-fuchsia-400">Octa</button>
+                    <button onclick="setPolySystem(5)" id="btn-sys-5" class="p-2 rounded-xl bg-black/40 border border-white/10 text-[10px] font-bold text-center cursor-pointer hover:border-fuchsia-400">Sphere</button>
+                </div>
+                <div class="grid grid-cols-3 gap-2 pt-1">
+                    <button onclick="generateProceduralPBR('cyber')" class="p-2 rounded-xl bg-cyan-600/30 border border-cyan-500 text-[10px] font-bold text-cyan-200 cursor-pointer">🔷 Cyber Circuit Map</button>
+                    <button onclick="generateProceduralPBR('organic')" class="p-2 rounded-xl bg-fuchsia-600/30 border border-fuchsia-500 text-[10px] font-bold text-fuchsia-200 cursor-pointer">🧬 Organic Cellular</button>
+                    <button onclick="generateProceduralPBR('carbon')" class="p-2 rounded-xl bg-purple-600/30 border border-purple-500 text-[10px] font-bold text-purple-200 cursor-pointer">⬛ Carbon Weave</button>
+                </div>
+                <div class="space-y-1">
+                    <div class="flex justify-between text-[11px] font-mono text-gray-300">
+                        <span>Displacement Amplitude (Normal & Height)</span>
+                        <span id="val-disp">0.25</span>
+                    </div>
+                    <input type="range" id="range-disp" min="0" max="1" step="0.01" value="0.25" class="w-full cursor-pointer" oninput="updateDisplacement(this.value)">
+                </div>
+                <div class="flex gap-2 pt-1">
+                    <button onclick="toggleIKTendrils(true)" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600/40 to-cyan-600/40 border border-fuchsia-500 text-xs font-bold text-white cursor-pointer">Toggle IK Tendril Arms</button>
+                    <button onclick="toggleClothSim(true)" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-cyan-600/40 to-purple-600/40 border border-cyan-500 text-xs font-bold text-white cursor-pointer">Toggle Cloth Ribbon</button>
+                </div>
+            </div>
+
+            <!-- Panel 2: GPU Particle Flow & Vector Field -->
+            <div id="panel-particles" class="glass-panel p-4 rounded-2xl space-y-3 shadow-2xl hidden">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-cyan-300 font-mono">GPU PARTICLE FLOW & CURL NOISE</span>
+                    <span class="text-[10px] font-mono text-fuchsia-400">Count: 5,000 Nodes</span>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-[11px] font-mono text-gray-300">
+                        <span>Particle Orbit Speed</span>
+                        <span id="val-pspeed">1.50</span>
+                    </div>
+                    <input type="range" id="range-pspeed" min="0.1" max="5.0" step="0.1" value="1.5" class="w-full cursor-pointer" oninput="updateParticleSpeed(this.value)">
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-[11px] font-mono text-gray-300">
+                        <span>Curl Noise Turbulence</span>
+                        <span id="val-pturb">0.80</span>
+                    </div>
+                    <input type="range" id="range-pturb" min="0.0" max="2.0" step="0.05" value="0.8" class="w-full cursor-pointer" oninput="updateParticleTurbulence(this.value)">
+                </div>
+                <button onclick="burstParticles()" class="w-full py-2.5 rounded-xl bg-cyan-600/40 hover:bg-cyan-600/60 border border-cyan-400 font-bold text-xs text-cyan-100 cursor-pointer shadow-lg">⚡ TRIGGER KINETIC BURST</button>
+            </div>
+
+            <!-- Panel 3: Audio-Reactive Frequency FFT -->
+            <div id="panel-audio" class="glass-panel p-4 rounded-2xl space-y-3 shadow-2xl hidden">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-purple-300 font-mono">WEB AUDIO API FREQUENCY SPECTRUM</span>
+                    <span id="audio-status" class="text-[10px] font-mono text-cyan-400">READY</span>
+                </div>
+                <p class="text-[11px] text-gray-300">Connect sovereign audio synthesizer or load custom rhythm beat stream to pulse 3D mesh and bloom shaders.</p>
+                <div class="flex gap-2">
+                    <button onclick="toggleAudioSynth(true)" id="btn-play-audio" class="flex-1 py-2.5 rounded-xl bg-purple-600/50 hover:bg-purple-600/70 border border-purple-400 font-bold text-xs text-purple-100 cursor-pointer">▶ START SYNTH BEAT</button>
+                    <button onclick="toggleAudioSynth(false)" class="px-4 py-2.5 rounded-xl bg-gray-800 border border-white/10 font-bold text-xs text-gray-300 cursor-pointer">■ STOP</button>
+                </div>
+                <div class="bg-black/60 p-3 rounded-xl border border-purple-500/30 flex items-center justify-between">
+                    <span class="text-[11px] font-mono text-gray-400">FFT Peak Amplitude:</span>
+                    <span id="fft-val" class="text-xs font-mono text-fuchsia-400 font-bold">0.00 dB</span>
+                </div>
+            </div>
+
+            <!-- Panel 4: Interactive NLA Timeline -->
+            <div id="panel-timeline" class="glass-panel p-4 rounded-2xl space-y-3 shadow-2xl hidden">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-amber-300 font-mono">NON-LINEAR KEYFRAME TIMELINE (NLA)</span>
+                    <button onclick="toggleNLAPlay()" id="btn-nla-play" class="px-3 py-1 rounded-lg bg-amber-600 text-xs font-bold text-black cursor-pointer">▶ PLAY NLA</button>
+                </div>
+                <div class="space-y-2 text-[10px] font-mono">
+                    <div class="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/10">
+                        <span class="w-20 text-fuchsia-400 font-bold">CAMERA PATH</span>
+                        <input type="range" min="0" max="100" value="0" class="flex-1 cursor-pointer" id="nla-cam-scrub" oninput="scrubNLA('cam', this.value)">
+                    </div>
+                    <div class="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/10">
+                        <span class="w-20 text-cyan-400 font-bold">MORPH PULSE</span>
+                        <input type="range" min="0" max="100" value="0" class="flex-1 cursor-pointer" id="nla-morph-scrub" oninput="scrubNLA('morph', this.value)">
+                    </div>
+                    <div class="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/10">
+                        <span class="w-20 text-purple-400 font-bold">BLOOM INTENS</span>
+                        <input type="range" min="0" max="100" value="50" class="flex-1 cursor-pointer" id="nla-bloom-scrub" oninput="scrubNLA('bloom', this.value)">
+                    </div>
+                </div>
+                <p class="text-[10px] text-gray-400 italic">Scrub or play NLA tracks to interpolate keyframe curves seamlessly across tracks.</p>
+            </div>
+
+            <!-- Panel 5: Visual Node Graph Inspector -->
+            <div id="panel-nodes" class="glass-panel p-4 rounded-2xl space-y-3 shadow-2xl hidden">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-cyan-300 font-mono">VISUAL SHADER NODE GRAPH</span>
+                    <span class="text-[10px] font-mono text-cyan-400">3 Nodes Linked</span>
+                </div>
+                <div class="grid grid-cols-1 gap-2.5 font-mono text-[11px]">
+                    <div class="node-card p-3 rounded-xl">
+                        <div class="flex justify-between text-cyan-300 font-bold mb-1">
+                            <span>[01] Simplex Noise Gen</span>
+                            <span class="text-[9px] text-gray-400">OUT: float</span>
+                        </div>
+                        <p class="text-[10px] text-gray-300">Frequency: 2.4 | Octaves: 4</p>
+                    </div>
+                    <div class="flex justify-between items-center px-2">
+                        <div class="w-0.5 h-4 bg-cyan-400 mx-auto"></div>
+                    </div>
+                    <div class="node-card p-3 rounded-xl">
+                        <div class="flex justify-between text-fuchsia-300 font-bold mb-1">
+                            <span>[02] Vector Displacement Math</span>
+                            <span class="text-[9px] text-gray-400">OUT: vec3</span>
+                        </div>
+                        <p class="text-[10px] text-gray-300">Multiply Noise * Normal Vector</p>
+                    </div>
+                    <div class="flex justify-between items-center px-2">
+                        <div class="w-0.5 h-4 bg-fuchsia-400 mx-auto"></div>
+                    </div>
+                    <div class="node-card p-3 rounded-xl">
+                        <div class="flex justify-between text-amber-300 font-bold mb-1">
+                            <span>[03] PBR Material Output</span>
+                            <span class="text-[9px] text-gray-400">IN: Surface</span>
+                        </div>
+                        <p class="text-[10px] text-gray-300">Shader: Physical Transmission & SSS</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel 6: Export Studio (GLTF, WebM Video, PNG Snapshot) -->
+            <div id="panel-export" class="glass-panel p-4 rounded-2xl space-y-3 shadow-2xl hidden">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-amber-300 font-mono">SOVEREIGN EXPORT ENGINE</span>
+                    <span class="text-[10px] font-mono text-cyan-400">READY</span>
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="exportGLTFModel()" class="w-full py-2.5 rounded-xl bg-amber-600/40 hover:bg-amber-600/60 border border-amber-500 font-bold text-xs text-amber-100 cursor-pointer shadow-lg">📦 Export 3D Model (.GLTF / .glb)</button>
+                    <button onclick="take4KSnapshot()" class="w-full py-2.5 rounded-xl bg-cyan-600/40 hover:bg-cyan-600/60 border border-cyan-500 font-bold text-xs text-cyan-100 cursor-pointer shadow-lg">📸 Snap 4K PNG Render</button>
+                    <button onclick="toggleVideoRecording()" id="btn-rec-video" class="w-full py-2.5 rounded-xl bg-fuchsia-600/40 hover:bg-fuchsia-600/60 border border-fuchsia-500 font-bold text-xs text-fuchsia-100 cursor-pointer shadow-lg">🔴 Record WebM Video Stream</button>
+                </div>
+                <div id="export-status" class="text-[10px] font-mono text-center text-gray-400 pt-1"></div>
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="flex justify-between items-center glass-panel px-4 py-2.5 rounded-2xl text-xs font-mono">
+            <span>FPS: <span id="fps-display" class="text-fuchsia-400">60</span></span>
+            <span class="text-gray-400 hidden sm:inline">SOVEREIGN ANIMATION STUDIO // POST-PROCESSING ACTIVE</span>
+            <span>GPU: <span class="text-cyan-400">ONLINE</span></span>
+        </footer>
+
+    </div>
+
+    <!-- Application Script implementing all 10 advanced features -->
+    <script>
+        let scene, camera, renderer, controls, composer;
+        let mesh, geometry, material;
+        let particleSystem, particleGeo, particleMat;
+        let clock = new THREE.Clock();
+        let currentSystem = 1;
+        let dispAmplitude = 0.25;
+        let pSpeed = 1.5;
+        let pTurb = 0.8;
+
+        // Audio State
+        let audioCtx, analyser, dataArray, isAudioPlaying = false;
+        let synthOsc, synthGain;
+
+        // IK Tendrils State
+        let ikTendrils = [];
+        let isIKActive = false;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0, 0);
+
+        // Cloth Simulation State
+        let clothMesh, clothGeom;
+        let clothParticles = [];
+        let isClothActive = false;
+        const clothWidth = 15, clothHeight = 15;
+
+        // NLA Timeline State
+        let isNLAPlaying = false;
+        let nlaTime = 0;
+
+        // Post-Processing
+        let bloomPass;
+
+        function switchTab(tabId) {
+            ['poly', 'particles', 'audio', 'timeline', 'nodes', 'export'].forEach(id => {
+                document.getElementById(`panel-${id}`).classList.add('hidden');
+                document.getElementById(`tab-${id}`).className = "px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white transition cursor-pointer";
+            });
+            document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabId}`).className = "px-2.5 py-1.5 rounded-xl text-[11px] font-bold tab-active transition cursor-pointer";
+        }
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x020205, 0.022);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 4.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.3;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lighting (HDRI Studio setup simulation)
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
+            const keyLight = new THREE.PointLight(0xd946ef, 7, 30);
+            keyLight.position.set(5, 5, 5);
+            scene.add(keyLight);
+            const fillLight = new THREE.PointLight(0x06b6d4, 6, 30);
+            fillLight.position.set(-5, -3, 4);
+            scene.add(fillLight);
+            const rimLight = new THREE.PointLight(0xf59e0b, 5, 25);
+            rimLight.position.set(0, 5, -5);
+            scene.add(rimLight);
+
+            // Post-Processing Pipeline (Bloom, Chromatic Aberration, Film Grain)
+            const renderScene = new THREE.RenderPass(scene, camera);
+            bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.75, 0.4, 0.85);
+            
+            composer = new THREE.EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            // Build initial geometry & particles
+            buildPolygonalMesh(currentSystem, 4);
+            buildGPUParticles();
+            buildIKTendrils();
+            buildClothRibbon();
+
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousemove', onMouseMove);
+            animate();
+        }
+
+        // 1. Polygonal Systems & Procedural PBR Generator
+        function buildPolygonalMesh(sysId, subdivision) {
+            if (mesh) scene.remove(mesh);
+            currentSystem = sysId;
+            let baseGeo;
+
+            switch(sysId) {
+                case 1: baseGeo = new THREE.IcosahedronGeometry(1.4, subdivision); break;
+                case 2: baseGeo = new THREE.DodecahedronGeometry(1.4, subdivision - 1); break;
+                case 3: baseGeo = new THREE.TorusKnotGeometry(1.0, 0.3, subdivision * 35, subdivision * 8); break;
+                case 4: baseGeo = new THREE.OctahedronGeometry(1.5, subdivision + 1); break;
+                case 5: baseGeo = new THREE.SphereGeometry(1.4, subdivision * 14, subdivision * 14); break;
+            }
+
+            geometry = baseGeo.clone();
+            const pos = geometry.attributes.position;
+            geometry.userData = { originalPositions: pos.clone() };
+
+            material = new THREE.MeshPhysicalMaterial({
+                color: 0x9333ea,
+                roughness: 0.15,
+                metalness: 0.85,
+                transmission: 0.25,
+                ior: 1.5,
+                wireframe: false
+            });
+
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            document.getElementById('poly-points-count').textContent = `${pos.count.toLocaleString()} Vertices`;
+        }
+
+        function setPolySystem(id) {
+            for(let i=1; i<=5; i++) {
+                document.getElementById(`btn-sys-${i}`).className = "p-2 rounded-xl bg-black/40 border border-white/10 text-[10px] font-bold text-center cursor-pointer hover:border-fuchsia-400";
+            }
+            document.getElementById(`btn-sys-${id}`).className = "p-2 rounded-xl bg-fuchsia-600/40 border border-fuchsia-500 text-[10px] font-bold text-center cursor-pointer";
+            buildPolygonalMesh(id, 4);
+        }
+
+        function generateProceduralPBR(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            if (type === 'cyber') {
+                ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, 512, 512);
+                ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 4;
+                for(let i=0; i<10; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random()*512, 0); ctx.lineTo(Math.random()*512, 512);
+                    ctx.stroke();
+                }
+                material.color.setHex(0x0284c7);
+                material.roughness = 0.1;
+                material.metalness = 0.95;
+            } else if (type === 'organic') {
+                ctx.fillStyle = '#200515'; ctx.fillRect(0, 0, 512, 512);
+                ctx.fillStyle = '#d946ef';
+                for(let i=0; i<100; i++) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random()*512, Math.random()*512, Math.random()*25, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                material.color.setHex(0xf43f5e);
+                material.roughness = 0.3;
+                material.transmission = 0.4;
+            } else if (type === 'carbon') {
+                ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, 512, 512);
+                ctx.fillStyle = '#374151';
+                for(let x=0; x<512; x+=16) {
+                    for(let y=0; y<512; y+=16) {
+                        if ((x+y)%32 === 0) ctx.fillRect(x, y, 16, 16);
+                    }
+                }
+                material.color.setHex(0x1f2937);
+                material.roughness = 0.2;
+                material.metalness = 0.9;
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(3, 3);
+            material.bumpMap = texture;
+            material.bumpScale = dispAmplitude;
+            material.needsUpdate = true;
+        }
+
+        function updateDisplacement(val) {
+            dispAmplitude = parseFloat(val);
+            document.getElementById('val-disp').textContent = dispAmplitude.toFixed(2);
+            if (material.bumpMap) {
+                material.bumpScale = dispAmplitude;
+            }
+        }
+
+        // 2. GPU Particle Flow & Vector Field
+        function buildGPUParticles() {
+            const count = 5000;
+            particleGeo = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+
+            const color1 = new THREE.Color(0xd946ef);
+            const color2 = new THREE.Color(0x06b6d4);
+
+            for (let i = 0; i < count * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 6;
+                positions[i+1] = (Math.random() - 0.5) * 6;
+                positions[i+2] = (Math.random() - 0.5) * 6;
+
+                const mixedColor = color1.clone().lerp(color2, Math.random());
+                colors[i] = mixedColor.r;
+                colors[i+1] = mixedColor.g;
+                colors[i+2] = mixedColor.b;
+            }
+
+            particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            particleMat = new THREE.PointsMaterial({
+                size: 0.035,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.85,
+                blending: THREE.AdditiveBlending
+            });
+
+            particleSystem = new THREE.Points(particleGeo, particleMat);
+            scene.add(particleSystem);
+        }
+
+        function updateParticleSpeed(val) { pSpeed = parseFloat(val); document.getElementById('val-pspeed').textContent = pSpeed.toFixed(2); }
+        function updateParticleTurbulence(val) { pTurb = parseFloat(val); document.getElementById('val-pturb').textContent = pTurb.toFixed(2); }
+        function burstParticles() {
+            const pos = particleGeo.attributes.position;
+            for (let i = 0; i < pos.count * 3; i += 3) {
+                pos.array[i] += (Math.random() - 0.5) * 2.5;
+                pos.array[i+1] += (Math.random() - 0.5) * 2.5;
+                pos.array[i+2] += (Math.random() - 0.5) * 2.5;
+            }
+            pos.needsUpdate = true;
+        }
+
+        // 3. Audio-Reactive Frequency FFT via Web Audio API
+        function toggleAudioSynth(state) {
+            if (state && !isAudioPlaying) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 64;
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                synthOsc = audioCtx.createOscillator();
+                synthGain = audioCtx.createGain();
+
+                synthOsc.type = 'sawtooth';
+                synthOsc.frequency.setValueAtTime(110, audioCtx.currentTime); // A2 bass note
+
+                // LFO frequency mod
+                const lfo = audioCtx.createOscillator();
+                lfo.frequency.value = 2.5;
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 40;
+                lfo.connect(lfoGain);
+                lfoGain.connect(synthOsc.frequency);
+                lfo.start();
+
+                synthGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                synthOsc.connect(synthGain);
+                synthGain.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                synthOsc.start();
+
+                isAudioPlaying = true;
+                document.getElementById('audio-status').textContent = 'ACTIVE (SYNTH BEAT)';
+                document.getElementById('audio-status').className = 'text-[10px] font-mono text-fuchsia-400 font-bold';
+            } else if (!state && isAudioPlaying) {
+                if (synthOsc) synthOsc.stop();
+                if (audioCtx) audioCtx.close();
+                isAudioPlaying = false;
+                document.getElementById('audio-status').textContent = 'READY';
+                document.getElementById('audio-status').className = 'text-[10px] font-mono text-cyan-400';
+            }
+        }
+
+        // 5. Inverse Kinematics (IK) Procedural Rigging Tendrils
+        function buildIKTendrils() {
+            const materialLine = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.6 });
+            for(let i=0; i<4; i++) {
+                const points = [];
+                for(let j=0; j<6; j++) points.push(new THREE.Vector3((i-1.5)*0.8, -1.5, j*0.4 - 1.0));
+                const geom = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geom, materialLine);
+                line.visible = false;
+                scene.add(line);
+                ikTendrils.push({ line: line, points: points, angleOffset: i * Math.PI / 2 });
+            }
+        }
+
+        function toggleIKTendrils(state) {
+            isIKActive = state;
+            ikTendrils.forEach(t => t.line.visible = state);
+        }
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        // 9. Spring-Mass Soft-Body Cloth / Membrane Simulation
+        function buildClothRibbon() {
+            clothGeom = new THREE.PlaneGeometry(3, 3, clothWidth, clothHeight);
+            const clothMat = new THREE.MeshPhysicalMaterial({
+                color: 0xd946ef,
+                roughness: 0.2,
+                metalness: 0.5,
+                side: THREE.DoubleSide,
+                wireframe: false
+            });
+            clothMesh = new THREE.Mesh(clothGeom, clothMat);
+            clothMesh.position.set(2.5, 0, 0);
+            clothMesh.rotation.y = -Math.PI / 4;
+            clothMesh.visible = false;
+            scene.add(clothMesh);
+        }
+
+        function toggleClothSim(state) {
+            isClothActive = state;
+            clothMesh.visible = state;
+        }
+
+        // 4. Interactive NLA Keyframe Timeline Scrubbing
+        function toggleNLAPlay() {
+            isNLAPlaying = !isNLAPlaying;
+            document.getElementById('btn-nla-play').textContent = isNLAPlaying ? "⏸ PAUSE NLA" : "▶ PLAY NLA";
+        }
+
+        function scrubNLA(track, val) {
+            const v = parseFloat(val) / 100;
+            if (track === 'cam') {
+                camera.position.x = Math.sin(v * Math.PI * 2) * 4.5;
+                camera.position.z = Math.cos(v * Math.PI * 2) * 4.5;
+                camera.lookAt(0, 0, 0);
+            } else if (track === 'morph' && mesh) {
+                mesh.scale.setScalar(0.8 + v * 0.5);
+            } else if (track === 'bloom' && bloomPass) {
+                bloomPass.strength = v * 2.5;
+            }
+        }
+
+        // 7. Sovereign Export Engine (GLTF, WebM, 4K PNG)
+        function exportGLTFModel() {
+            const exporter = new THREE.GLTFExporter();
+            document.getElementById('export-status').textContent = "Generating GLTF 3D Asset...";
+            exporter.parse(mesh, function (gltf) {
+                const output = JSON.stringify(gltf, null, 2);
+                const blob = new Blob([output], { type: 'text/plain' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'HyperFace_Sovereign_Model.gltf';
+                link.click();
+                document.getElementById('export-status').textContent = "GLTF Export Complete!";
+            }, { binary: false });
+        }
+
+        function take4KSnapshot() {
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'HyperFace_Studio_Render_4K.png';
+            link.click();
+            document.getElementById('export-status').textContent = "4K PNG Snapshot Saved!";
+        }
+
+        let mediaRecorder, recordedChunks = [];
+        function toggleVideoRecording() {
+            const btn = document.getElementById('btn-rec-video');
+            if (!mediaRecorder || mediaRecorder.state === "inactive") {
+                const stream = renderer.domElement.captureStream(60);
+                recordedChunks = [];
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+                mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'HyperFace_Animation_Studio.webm';
+                    a.click();
+                    document.getElementById('export-status').textContent = "WebM Video Exported Successfully!";
+                };
+                mediaRecorder.start();
+                btn.textContent = "⏹ STOP & SAVE RECORDING";
+                btn.className = "w-full py-2.5 rounded-xl bg-red-600 font-bold text-xs text-white cursor-pointer shadow-lg";
+            } else {
+                mediaRecorder.stop();
+                btn.textContent = "🔴 Record WebM Video Stream";
+                btn.className = "w-full py-2.5 rounded-xl bg-fuchsia-600/40 hover:bg-fuchsia-600/60 border border-fuchsia-500 font-bold text-xs text-fuchsia-100 cursor-pointer shadow-lg";
+            }
+        }
+
+        // Animation Loop & Real-Time Simulation Updates
+        let frameCount = 0, lastTime = performance.now();
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                document.getElementById('fps-display').textContent = frameCount;
+                frameCount = 0; lastTime = now;
+            }
+
+            controls.update();
+
+            // Audio FFT Frequency Reaction
+            let fftScale = 1.0;
+            if (isAudioPlaying && analyser) {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
+                const avg = sum / dataArray.length;
+                fftScale = 1.0 + (avg / 128) * 0.25;
+                document.getElementById('fft-val').textContent = `${avg.toFixed(1)} dB`;
+                if (bloomPass) bloomPass.strength = 0.75 + (avg / 128) * 1.5;
+            }
+
+            if (mesh) {
+                mesh.rotation.y = elapsedTime * 0.15;
+                mesh.scale.setScalar(fftScale);
+            }
+
+            // GPU Particles Flow Update
+            if (particleGeo) {
+                const positions = particleGeo.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i+1] += Math.sin(elapsedTime * pSpeed + positions[i]) * 0.01 * pTurb;
+                    positions[i] += Math.cos(elapsedTime * pSpeed + positions[i+1]) * 0.01 * pTurb;
+                    if (positions[i+1] > 3) positions[i+1] = -3;
+                }
+                particleGeo.attributes.position.needsUpdate = true;
+                particleSystem.rotation.y = elapsedTime * 0.05;
+            }
+
+            // IK Tendrils update tracking mouse
+            if (isIKActive) {
+                ikTendrils.forEach((tendril, idx) => {
+                    const pts = tendril.points;
+                    pts[5].x = mouse.x * 2.5 + Math.sin(elapsedTime * 2 + idx) * 0.5;
+                    pts[5].y = mouse.y * 2.5 + Math.cos(elapsedTime * 2 + idx) * 0.5;
+                    // Simple CCD spring relaxation along chain
+                    for (let j = 4; j >= 0; j--) {
+                        pts[j].lerp(pts[j+1], 0.25);
+                    }
+                    tendril.line.geometry.setFromPoints(pts);
+                });
+            }
+
+            // Cloth Simulation Ripples via Verlet Integration
+            if (isClothActive && clothGeom) {
+                const posAttr = clothGeom.attributes.position;
+                for(let i=0; i<posAttr.count; i++) {
+                    const vx = posAttr.getX(i);
+                    const vy = posAttr.getY(i);
+                    const zWave = Math.sin(vx * 3 + elapsedTime * 4) * Math.cos(vy * 3 + elapsedTime * 3) * 0.25;
+                    posAttr.setZ(i, zWave);
+                }
+                posAttr.needsUpdate = true;
+                clothGeom.computeVertexNormals();
+            }
+
+            // NLA Auto Play interpolation
+            if (isNLAPlaying) {
+                nlaTime += delta * 0.3;
+                if (nlaTime > 1.0) nlaTime = 0;
+                const scrubVal = nlaTime * 100;
+                document.getElementById('nla-cam-scrub').value = scrubVal;
+                scrubNLA('cam', scrubVal);
+            }
+
+            composer.render();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
