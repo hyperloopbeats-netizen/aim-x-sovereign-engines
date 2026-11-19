@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>FractalOS // 2.39:1 CinemaScope &amp; Sovereign Brain Kernel</title>
+  <style>
+    :root {
+      --topbar-h: 44px;
+      --matte-h: 0px;
+      --bg-void: #040711;
+      --bg-panel: rgba(9, 15, 29, 0.84);
+      --border-subtle: rgba(148, 184, 224, 0.2);
+      --accent-gold: #fbbf24;
+      --accent-cyan: #38bdf8;
+      --accent-violet: #c084fc;
+      --accent-emerald: #34d399;
+      --accent-rose: #fb7185;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-void);
+      color: var(--text-main);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Full-viewport animated background & multiplied cone telemetry canvas */
+    #kernel-bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      display: block;
+      transition: opacity 0.28s ease, filter 0.28s ease;
+    }
+
+    body.view-3d #kernel-bg-canvas {
+      z-index: 6;
+      cursor: grab;
+      touch-action: none;
+    }
+    body.view-3d #kernel-bg-canvas:active {
+      cursor: grabbing;
+    }
+
+    /* Theatre View auditorium surround & curtain framing */
+    #theatre-surround {
+      position: fixed;
+      top: var(--topbar-h);
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 4;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      background:
+        radial-gradient(ellipse 80% 52% at 50% 48%, rgba(251, 191, 36, 0.11) 0%, rgba(8, 12, 24, 0.55) 62%, rgba(2, 4, 10, 0.94) 100%),
+        linear-gradient(to top, rgba(4, 6, 12, 0.96) 0%, rgba(36, 10, 18, 0.62) 22%, transparent 46%),
+        linear-gradient(to right, rgba(34, 8, 16, 0.78) 0%, transparent 16%, transparent 84%, rgba(34, 8, 16, 0.78) 100%);
+    }
+    body.theatre-on #theatre-surround {
+      opacity: 1;
+    }
+
+    #curtain-left, #curtain-right {
+      position: fixed;
+      top: var(--topbar-h);
+      bottom: 0;
+      width: 0vw;
+      z-index: 6;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(32, 7, 15, 0.92) 0%, rgba(72, 14, 28, 0.74) 68%, rgba(130, 28, 48, 0.14) 100%);
+      border-right: 1px solid rgba(251, 191, 36, 0.22);
+      transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #curtain-left { left: 0; }
+    #curtain-right { right: 0; transform: scaleX(-1); }
+    body.theatre-on #curtain-left,
+    body.theatre-on #curtain-right {
+      width: min(7vw, 72px);
+    }
+
+    /* 2.39:1 CinemaScope Projection Stage */
+    #scope-stage {
+      position: fixed;
+      top: calc(var(--topbar-h) + var(--matte-h));
+      bottom: var(--matte-h);
+      left: 0;
+      right: 0;
+      z-index: 5;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      overflow: hidden;
+      background: rgba(3, 6, 14, 0.88);
+      transition: top 0.25s ease, bottom 0.25s ease, box-shadow 0.3s ease, opacity 0.25s ease;
+    }
+    body.has-media.view-movie #scope-stage {
+      display: flex;
+    }
+    body.view-3d #scope-stage {
+      display: none;
+    }
+    body.theatre-on #scope-stage {
+      box-shadow: 0 0 80px rgba(251, 191, 36, 0.14), inset 0 0 50px rgba(0, 0, 0, 0.72);
+    }
+
+    /* In 3D mode, keep the centered load prompt accessible when no media is loaded yet */
+    body.has-media.view-3d #load-prompt-layer {
+      display: none;
+    }
+
+    #scope-media-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: transform 0.22s ease, filter 0.25s ease;
+    }
+
+    /* Subtract optical mode: carves an anamorphic center-subtracted aperture */
+    body.mode-subtract #scope-media-wrap {
+      filter: contrast(1.24) saturate(1.18) hue-rotate(-14deg);
+      -webkit-mask-image:
+        radial-gradient(ellipse 44% 82% at 50% 50%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.14) 48%, rgba(0,0,0,0.92) 72%, #000000 100%),
+        linear-gradient(to right, #000000 0%, rgba(0,0,0,0.4) 14%, rgba(0,0,0,0.12) 30%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.4) 86%, #000000 100%);
+      -webkit-mask-composite: source-over;
+      mask-image:
+        radial-gradient(ellipse 44% 82% at 50% 50%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.14) 48%, rgba(0,0,0,0.92) 72%, #000000 100%),
+        linear-gradient(to right, #000000 0%, rgba(0,0,0,0.4) 14%, rgba(0,0,0,0.12) 30%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.4) 86%, #000000 100%);
+    }
+
+    #scope-video,
+    #scope-image,
+    #scope-stream-canvas,
+    #scope-liquid8k-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.22s ease, opacity 0.2s ease;
+    }
+
+    #scope-video,
+    #scope-image,
+    #scope-stream-canvas {
+      display: none;
+    }
+
+    #scope-liquid8k-canvas {
+      display: none;
+      image-rendering: auto;
+      filter: contrast(1.05) saturate(1.06);
+    }
+
+    body.liquid8k-on #scope-liquid8k-canvas {
+      display: block;
+      z-index: 3;
+    }
+
+    /* Subtle CinemaScope optical reticle & aspect badge inside stage */
+    #scope-reticle {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      border-top: 1px solid rgba(251, 191, 36, 0.22);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.22);
+    }
+    body.mode-subtract #scope-reticle {
+      border-color: rgba(192, 132, 252, 0.42);
+      box-shadow: inset 0 0 64px rgba(15, 23, 42, 0.85);
+    }
+
+    /* Top & Bottom 2.39:1 CinemaScope Mattes */
+    #scope-matte-top,
+    #scope-matte-bottom {
+      position: fixed;
+      left: 0;
+      right: 0;
+      height: var(--matte-h);
+      background: #020307;
+      z-index: 7;
+      pointer-events: none;
+      opacity: 0;
+      transition: height 0.25s ease, opacity 0.25s ease;
+    }
+    #scope-matte-top {
+      top: var(--topbar-h);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.16);
+    }
+    #scope-matte-bottom {
+      bottom: 0;
+      border-top: 1px solid rgba(251, 191, 36, 0.16);
+    }
+    body.scope-on #scope-matte-top,
+    body.scope-on #scope-matte-bottom {
+      opacity: 0.97;
+    }
+
+    /* Slim Top Bar */
+    #top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--topbar-h);
+      z-index: 30;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: rgba(6, 10, 20, 0.86);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .top-left, .top-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent-gold);
+      box-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    .brain-pill {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #e9d5ff;
+      background: rgba(168, 85, 247, 0.16);
+      border: 1px solid rgba(192, 132, 252, 0.36);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+    }
+
+    .top-btn {
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.78);
+      color: var(--text-main);
+      transition: background 0.16s ease, border-color 0.16s ease, transform 0.1s ease;
+      white-space: nowrap;
+    }
+    .top-btn:active {
+      transform: scale(0.97);
+    }
+    .top-btn.active-cyan {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: rgba(56, 189, 248, 0.62);
+      color: #e0f2fe;
+    }
+    .top-btn.active-rose {
+      background: rgba(244, 63, 94, 0.24);
+      border-color: rgba(251, 113, 133, 0.65);
+      color: #fecdd3;
+    }
+    .top-btn.load-btn {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #e0f2fe;
+    }
+
+    /* Centered Clean Prompt to Load/Drop MP4 or Start Stream */
+    #load-prompt-layer {
+      position: fixed;
+      top: var(--topbar-h);
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      pointer-events: none;
+    }
+    body.has-media #load-prompt-layer {
+      display: none;
+    }
+
+    .prompt-card {
+      pointer-events: auto;
+      width: 100%;
+      max-width: 420px;
+      padding: 24px 20px;
+      border-radius: 20px;
+      text-align: center;
+      background: var(--bg-panel);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      border: 1px solid rgba(251, 191, 36, 0.32);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .prompt-card.drag-over {
+      border-color: var(--accent-cyan);
+      transform: scale(1.015);
+    }
+
+    .prompt-kicker {
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 8px;
+    }
+
+    .prompt-title {
+      margin: 0 0 8px 0;
+      font-size: 19px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.25;
+    }
+
+    .prompt-desc {
+      margin: 0 0 18px 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+
+    .prompt-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .action-btn {
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.16s ease;
+    }
+    .action-btn:active {
+      transform: scale(0.97);
+    }
+    .action-btn.primary {
+      background: rgba(251, 191, 36, 0.24);
+      border-color: rgba(251, 191, 36, 0.65);
+      color: #fef9c3;
+    }
+    .action-btn.primary:hover {
+      background: rgba(251, 191, 36, 0.34);
+    }
+    .action-btn.secondary {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.52);
+      color: #e0f2fe;
+    }
+    .action-btn.secondary:hover {
+      background: rgba(56, 189, 248, 0.28);
+    }
+
+    .prompt-hint {
+      margin-top: 12px;
+      font-size: 10px;
+      color: #64748b;
+    }
+
+    /* Compact Non-Overlapping Control Pill Strip at Bottom */
+    #control-pill {
+      position: fixed;
+      bottom: calc(var(--matte-h) + 10px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: calc(100vw - 16px);
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(7, 12, 24, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65);
+      transition: bottom 0.25s ease;
+    }
+    body.has-media #control-pill {
+      display: flex;
+    }
+
+    .pill-btn {
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid rgba(148, 184, 224, 0.22);
+      background: rgba(15, 23, 42, 0.75);
+      color: var(--text-main);
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+      white-space: nowrap;
+    }
+    .pill-btn:active {
+      transform: scale(0.96);
+    }
+    .pill-btn.on-amber {
+      background: rgba(251, 191, 36, 0.22);
+      border-color: rgba(251, 191, 36, 0.6);
+      color: #fef08a;
+    }
+    .pill-btn.on-cyan {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: rgba(56, 189, 248, 0.6);
+      color: #e0f2fe;
+    }
+    .pill-btn.on-emerald {
+      background: rgba(52, 211, 153, 0.22);
+      border-color: rgba(52, 211, 153, 0.6);
+      color: #d1fae5;
+    }
+    .pill-btn.on-violet {
+      background: rgba(192, 132, 252, 0.24);
+      border-color: rgba(192, 132, 252, 0.65);
+      color: #f3e8ff;
+    }
+    .pill-btn.on-rose {
+      background: rgba(251, 113, 133, 0.24);
+      border-color: rgba(251, 113, 133, 0.65);
+      color: #ffe4e6;
+    }
+
+    .pill-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 4px;
+    }
+
+    /* Subtle non-blocking toast / recovery banner */
+    #status-toast {
+      position: fixed;
+      top: calc(var(--topbar-h) + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 35;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 10px;
+      color: #fef08a;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(251, 191, 36, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      max-width: 92vw;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #status-toast.show {
+      opacity: 1;
+    }
+
+    @media (max-width: 640px) {
+      .brain-pill {
+        max-width: 108px;
+      }
+      .top-btn {
+        padding: 4px 7px;
+        font-size: 9.5px;
+      }
+      .pill-btn {
+        padding: 5px 8px;
+        font-size: 9.5px;
+      }
+      .pill-meta {
+        max-width: 84px;
+      }
+    }
+  </style>
+</head>
+<body class="scope-on mode-stream liquid8k-on">
+  <!-- Full-viewport 2D Canvas: Origin (0,0) Multiplied Cone System + CSP Collector & Brain Telemetry -->
+  <canvas id="kernel-bg-canvas" aria-label="FractalOS Multiplied Cone & CSP Telemetry Canvas"></canvas>
+
+  <!-- Theatre View Auditorium Surround & Curtains -->
+  <div id="theatre-surround" aria-hidden="true"></div>
+  <div id="curtain-left" aria-hidden="true"></div>
+  <div id="curtain-right" aria-hidden="true"></div>
+
+  <!-- 2.39:1 CinemaScope Projection Stage -->
+  <div id="scope-stage" aria-label="2.39:1 CinemaScope Stage">
+    <div id="scope-media-wrap">
+      <video id="scope-video" playsinline loop muted preload="auto"></video>
+      <img id="scope-image" alt="Loaded CinemaScope Frame" />
+      <canvas id="scope-stream-canvas" width="956" height="400"></canvas>
+      <canvas id="scope-liquid8k-canvas" width="1920" height="804"></canvas>
+      <div id="scope-reticle"></div>
+    </div>
+  </div>
+
+  <!-- 2.39:1 CinemaScope Theatrical Mattes -->
+  <div id="scope-matte-top" aria-hidden="true"></div>
+  <div id="scope-matte-bottom" aria-hidden="true"></div>
+
+  <!-- Slim Top Bar -->
+  <header id="top-bar" class="mono">
+    <div class="top-left">
+      <span class="brand-dot"></span>
+      <span class="brand-title">FractalOS</span>
+      <span id="brainBadge" class="brain-pill">BRAIN v2.0 • 1 APP</span>
+    </div>
+    <div class="top-right">
+      <button id="movieModeTopBtn" type="button" aria-pressed="true" class="top-btn active-gold">MOVIE</button>
+      <button id="threeDModeTopBtn" type="button" aria-pressed="false" class="top-btn">3D MODE</button>
+      <button id="theatreTopBtn" type="button" aria-pressed="false" class="top-btn">THEATRE: OFF</button>
+      <button id="scopeTopBtn" type="button" aria-pressed="true" class="top-btn active-gold">2.39:1: ON</button>
+      <button id="loadTopBtn" type="button" class="top-btn load-btn">LOAD FILE</button>
+      <input id="mediaFileInput" type="file" accept="video/mp4,video/*,image/*" style="display:none;" />
+    </div>
+  </header>
+
+  <!-- Non-blocking status toast -->
+  <div id="status-toast" class="mono" role="status" aria-live="polite"></div>
+
+  <!-- Centered Clean Prompt to Load/Drop MP4 or Image (or Launch Test Stream) -->
+  <main id="load-prompt-layer">
+    <div id="dropCard" class="prompt-card">
+      <div class="prompt-kicker mono">2.39:1 CinemaScope • 3D &amp; Movie Kernel v2.0</div>
+      <h1 class="prompt-title">Add an MP4 or media file to project</h1>
+      <p class="prompt-desc">
+        Select or drop an <span class="mono" style="color:#fde68a;">.mp4</span> video or image onto the 2.39:1 CinemaScope stage, launch the built-in stream, or switch to <span class="mono" style="color:#7dd3fc;">3D Mode</span>.
+      </p>
+      <div class="prompt-actions">
+        <button id="pickFileBtn" type="button" class="action-btn primary mono">Add MP4 / File</button>
+        <button id="launchStreamBtn" type="button" class="action-btn secondary mono">Launch 2.39:1 Stream</button>
+      </div>
+      <div class="prompt-hint mono">Keys: [1/M] Movie • [2/3] 3D • [Space] Play/Pause • Drag &amp; drop MP4</div>
+    </div>
+  </main>
+
+  <!-- Compact Bottom Control Pill -->
+  <nav id="control-pill" class="mono" aria-label="CinemaScope & 3D Controls">
+    <button id="viewModeCycleBtn" type="button" aria-pressed="false" class="pill-btn on-amber">Mode: Movie</button>
+    <button id="playPauseBtn" type="button" class="pill-btn on-amber">Pause</button>
+    <button id="muteBtn" type="button" class="pill-btn">Unmute</button>
+    <button id="squeezeBtn" type="button" aria-pressed="true" class="pill-btn on-cyan">2.39x Squeeze: ON</button>
+    <button id="streamSubtractBtn" type="button" aria-pressed="false" class="pill-btn on-emerald">Mode: Stream</button>
+    <button id="liquid8kBtn" type="button" aria-pressed="true" class="pill-btn on-cyan">Liquid 8K: ON</button>
+    <span id="mediaLabel" class="pill-meta">239_stream.mp4</span>
+    <button id="changeFileBtn" type="button" class="pill-btn">Change</button>
+  </nav>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // -----------------------------------------------------------------------
+      // 1. CORE KERNEL STATE, AIM-X SOVEREIGN TELEMETRY & WATCHDOG
+      // -----------------------------------------------------------------------
+      const kernel = {
+        elapsed: 0,
+        lastFrameTime: performance.now(),
+        frameCount: 0,
+        lastRenderTick: performance.now(),
+        flux: 860,
+        tOut: 69.5,
+        tIn: 41.5,
+        pwm: 64,
+        flow: 4.6,
+        pcmSoc: 0.25,
+        modeId: 'M4',
+        viewMode: 'movie', // 'movie' | '3d'
+        streamMode: 'stream', // 'stream' | 'subtract'
+        squeeze239: true,
+        scopeEnabled: true,
+        liquid8kEnabled: true,
+        theatreView: false,
+        aimx: {
+          coreACoherence: 0.88,
+          coreBImpulse: 0.64,
+          swarmNodes: 18,
+          zeroCrossingHz: 1.4,
+          zeroCrossingPhase: 0,
+          firstPrincipleResonance: 0.92,
+          groundingStability: 0.97,
+        },
+        cones: {
+          count: 12,
+          scale: 1.0,
+          spreadDeg: 34,
+          phase: 0,
+          yaw: 0.42,
+          pitch: 0.34,
+          zoom: 1.0,
+          panX: 0,
+          panY: 0,
+        },
+        media: {
+          loaded: false,
+          type: 'none', // 'none' | 'video' | 'image' | 'stream'
+          playing: false,
+          muted: true,
+          name: '',
+          objectUrl: '',
+        },
+      };
+
+      function showToast(msg) {
+        const el = document.getElementById('status-toast');
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(showToast._timer);
+        showToast._timer = setTimeout(function () { el.classList.remove('show'); }, 2600);
+      }
+
+      // -----------------------------------------------------------------------
+      // 2. MAIN BRAIN BUS (window.FractalBrain v2.1.0 + AIM-X SOVEREIGN ENGINES)
+      // -----------------------------------------------------------------------
+      const fusedRegistry = new Map();
+      const eventListeners = new Set();
+      let eventSeq = 0;
+
+      function snapshotBrainState() {
+        const actualDt = Number(Math.max(0, kernel.tOut - kernel.tIn).toFixed(1));
+        return {
+          ts: Number(kernel.elapsed.toFixed(2)),
+          modeId: kernel.modeId,
+          viewMode: kernel.viewMode,
+          flux: kernel.flux,
+          actualDt,
+          pwm: Number(kernel.pwm.toFixed(1)),
+          flow: Number(kernel.flow.toFixed(2)),
+          pcmSoc: Number(kernel.pcmSoc.toFixed(2)),
+          streamMode: kernel.streamMode,
+          squeeze239: kernel.squeeze239,
+          scopeEnabled: kernel.scopeEnabled,
+          liquid8kEnabled: kernel.liquid8kEnabled,
+          theatreView: kernel.theatreView,
+          playing: kernel.media.playing,
+          mediaName: kernel.media.name || null,
+          mediaType: kernel.media.type,
+          aimx: {
+            coreACoherence: Number(kernel.aimx.coreACoherence.toFixed(3)),
+            coreBImpulse: Number(kernel.aimx.coreBImpulse.toFixed(3)),
+            swarmNodes: kernel.aimx.swarmNodes,
+            zeroCrossingHz: Number(kernel.aimx.zeroCrossingHz.toFixed(2)),
+            firstPrincipleResonance: Number(kernel.aimx.firstPrincipleResonance.toFixed(3)),
+            groundingStability: Number(kernel.aimx.groundingStability.toFixed(3)),
+          },
+          fusedAppIds: Array.from(fusedRegistry.keys()),
+        };
+      }
+
+      const FractalBrain = {
+        version: '2.1.0',
+        get state() {
+          return snapshotBrainState();
+        },
+        getSnapshot() {
+          return snapshotBrainState();
+        },
+        get apps() {
+          return Array.from(fusedRegistry.values());
+        },
+        get engines() {
+          return Array.from(fusedRegistry.values());
+        },
+        registerApp(appSpec) {
+          if (!appSpec || typeof appSpec.id !== 'string' || !appSpec.id.trim()) {
+            return false;
+          }
+          const id = appSpec.id.trim();
+          const record = {
+            id,
+            name: appSpec.name || id,
+            fusedAt: Number(kernel.elapsed.toFixed(2)),
+            onTelemetry: typeof appSpec.onTelemetry === 'function' ? appSpec.onTelemetry : null,
+            onEvent: typeof appSpec.onEvent === 'function' ? appSpec.onEvent : null,
+          };
+          fusedRegistry.set(id, record);
+          updateBrainBadge();
+          this.emit('APP_REGISTERED', { id, name: record.name });
+          return true;
+        },
+        fuseApp(appSpec) {
+          const ok = this.registerApp(appSpec);
+          if (ok) {
+            this.emit('APP_FUSED', { id: appSpec.id, name: appSpec.name || appSpec.id });
+          }
+          return ok;
+        },
+        set(patch) {
+          if (!patch || typeof patch !== 'object') return snapshotBrainState();
+          const prevViewMode = kernel.viewMode;
+          if (patch.viewMode === 'movie' || patch.viewMode === '3d') {
+            setViewMode(patch.viewMode, false);
+          }
+          if (patch.streamMode === 'stream' || patch.streamMode === 'subtract') {
+            setStreamMode(patch.streamMode, false);
+          }
+          if (typeof patch.squeeze239 === 'boolean') {
+            kernel.squeeze239 = patch.squeeze239;
+            syncMediaTransform();
+          }
+          if (typeof patch.scopeEnabled === 'boolean') {
+            kernel.scopeEnabled = patch.scopeEnabled;
+            syncScopeMattes();
+          }
+          if (typeof patch.liquid8kEnabled === 'boolean') {
+            setLiquid8k(patch.liquid8kEnabled, false);
+          }
+          if (typeof patch.theatreView === 'boolean') {
+            setTheatreView(patch.theatreView, false);
+          }
+          if (typeof patch.flux === 'number' && Number.isFinite(patch.flux)) {
+            kernel.flux = Math.max(0, Math.min(1200, patch.flux));
+          }
+          if (typeof patch.modeId === 'string' && patch.modeId.trim()) {
+            kernel.modeId = patch.modeId.trim();
+          }
+          updateBrainBadge();
+          this.emit('STATE_UPDATED', { patch });
+          if (prevViewMode !== kernel.viewMode) {
+            this.emit('mode:changed', { viewMode: kernel.viewMode, previousViewMode: prevViewMode });
+          }
+          return snapshotBrainState();
+        },
+        setViewMode(nextMode) {
+          setViewMode(nextMode, true);
+          return snapshotBrainState();
+        },
+        setStreamMode(nextMode) {
+          setStreamMode(nextMode, true);
+          return snapshotBrainState();
+        },
+        setLiquid8k(enabled) {
+          setLiquid8k(Boolean(enabled), true);
+          return snapshotBrainState();
+        },
+        setTheatreView(enabled) {
+          setTheatreView(Boolean(enabled), true);
+          return snapshotBrainState();
+        },
+        emit(eventName, payload) {
+          eventSeq += 1;
+          const evt = {
+            seq: eventSeq,
+            version: '2.1.0',
+            ts: Number(kernel.elapsed.toFixed(2)),
+            type: String(eventName || 'EVENT'),
+            payload: payload || {},
+            state: snapshotBrainState(),
+          };
+          for (const fn of eventListeners) {
+            try { fn(evt); } catch (_) {}
+          }
+          for (const app of fusedRegistry.values()) {
+            if (app.onEvent) {
+              try { app.onEvent(evt); } catch (_) {}
+            }
+          }
+          return evt;
+        },
+        on(callback) {
+          if (typeof callback !== 'function') return function () {};
+          eventListeners.add(callback);
+          return function unsubscribe() {
+            eventListeners.delete(callback);
+          };
+        },
+      };
+
+      window.FractalBrain = FractalBrain;
+
+      function updateBrainBadge() {
+        const badge = document.getElementById('brainBadge');
+        if (!badge) return;
+        const count = fusedRegistry.size;
+        const modeTag = kernel.streamMode === 'subtract' ? 'SUB' : 'STR';
+        const viewTag = kernel.viewMode === '3d' ? '3D' : 'MOV';
+        badge.textContent = `BRAIN v2.1 • ${count} FUSED • ${viewTag}/${modeTag}`;
+      }
+
+      // Pre-fuse CSP Collector + AIM-X Sovereign Engines (Core A, Core B, Core C, First Principle Loop)
+      FractalBrain.fuseApp({
+        id: 'csp-collector',
+        name: 'CSP Thermal Collector & Multiplied Cone Origin',
+        onTelemetry(snap) {
+          const drive = snap.playing ? 1.15 : 0.78;
+          kernel.cones.spreadDeg = 34 + Math.sin(snap.ts * 1.1) * (snap.streamMode === 'subtract' ? 8 : 4) * drive;
+        },
+        onEvent(evt) {
+          if (evt.type === 'MEDIA_LOADED') {
+            kernel.pwm = Math.min(92, kernel.pwm + 6);
+          } else if (evt.type === 'mode:changed') {
+            kernel.cones.scale = evt.payload && evt.payload.viewMode === '3d' ? 1.18 : 1.0;
+          }
+        },
+      });
+
+      FractalBrain.fuseApp({
+        id: 'aimx-core-a',
+        name: 'AIM-X Core A // Universal Synthesis',
+        onTelemetry(snap) {
+          const base = snap.liquid8kEnabled ? 0.91 : 0.79;
+          kernel.aimx.coreACoherence = Math.max(0.5, Math.min(0.99, base + Math.sin(snap.ts * 0.7) * 0.04));
+        },
+      });
+
+      FractalBrain.fuseApp({
+        id: 'aimx-core-b',
+        name: 'AIM-X Core B // Interactive 3D Physics & Simulation',
+        onTelemetry(snap) {
+          const energy = (snap.pwm / 100) * 0.65 + (snap.playing ? 0.25 : 0.05);
+          kernel.aimx.coreBImpulse = Math.max(0.1, Math.min(1.0, energy + Math.cos(snap.ts * 1.3) * 0.06));
+        },
+      });
+
+      FractalBrain.fuseApp({
+        id: 'aimx-core-c',
+        name: 'AIM-X Core C // Swarm Topology & Zero-Crossing Pulses',
+        onTelemetry(snap) {
+          kernel.aimx.zeroCrossingHz = snap.streamMode === 'subtract' ? 2.1 : 1.4;
+          kernel.aimx.zeroCrossingPhase = (snap.ts * kernel.aimx.zeroCrossingHz * Math.PI * 2) % (Math.PI * 2);
+        },
+      });
+
+      FractalBrain.fuseApp({
+        id: 'first-principle-loop',
+        name: 'First Principle Loop // Signal Injection, Resonance & Grounding',
+        onTelemetry(snap) {
+          const deltaNorm = Math.max(0, Math.min(1, snap.actualDt / 45));
+          kernel.aimx.firstPrincipleResonance = Math.max(0.6, Math.min(0.99, 0.84 + deltaNorm * 0.12 + Math.sin(snap.ts * 0.9) * 0.02));
+          kernel.aimx.groundingStability = snap.theatreView ? 0.99 : 0.96;
+        },
+      });
+
+      // -----------------------------------------------------------------------
+      // 3. 2.39:1 CINEMASCOPE MEDIA, 3D / MOVIE MODES, LIQUID 8K & THEATRE
+      // -----------------------------------------------------------------------
+      const bgCanvas = document.getElementById('kernel-bg-canvas');
+      const bgCtx = bgCanvas.getContext('2d');
+
+      const videoEl = document.getElementById('scope-video');
+      const imageEl = document.getElementById('scope-image');
+      const streamCanvas = document.getElementById('scope-stream-canvas');
+      const streamCtx = streamCanvas.getContext('2d');
+      const liquid8kCanvas = document.getElementById('scope-liquid8k-canvas');
+      const liquid8kCtx = liquid8kCanvas.getContext('2d');
+
+      const prevFrameCanvas = document.createElement('canvas');
+      prevFrameCanvas.width = 640;
+      prevFrameCanvas.height = 268;
+      const prevFrameCtx = prevFrameCanvas.getContext('2d');
+
+      function syncViewModeUi() {
+        const is3d = kernel.viewMode === '3d';
+        document.body.classList.toggle('view-3d', is3d);
+        document.body.classList.toggle('view-movie', !is3d);
+
+        const pill = document.getElementById('control-pill');
+        if (pill) {
+          pill.style.display = (kernel.media.loaded || is3d) ? 'flex' : 'none';
+        }
+
+        const movieTopBtn = document.getElementById('movieModeTopBtn');
+        const threeDTopBtn = document.getElementById('threeDModeTopBtn');
+        const cycleBtn = document.getElementById('viewModeCycleBtn');
+
+        if (movieTopBtn) {
+          movieTopBtn.setAttribute('aria-pressed', String(!is3d));
+          movieTopBtn.classList.toggle('active-gold', !is3d);
+        }
+        if (threeDTopBtn) {
+          threeDTopBtn.setAttribute('aria-pressed', String(is3d));
+          threeDTopBtn.classList.toggle('active-cyan', is3d);
+        }
+        if (cycleBtn) {
+          cycleBtn.setAttribute('aria-pressed', String(is3d));
+          cycleBtn.textContent = is3d ? 'Mode: 3D' : 'Mode: Movie';
+          cycleBtn.classList.toggle('on-amber', !is3d);
+          cycleBtn.classList.toggle('on-cyan', is3d);
+        }
+
+        syncScopeMattes();
+        updateBrainBadge();
+      }
+
+      function setViewMode(nextMode, emitChange) {
+        if (nextMode !== 'movie' && nextMode !== '3d') return;
+        const prev = kernel.viewMode;
+        kernel.viewMode = nextMode;
+        syncViewModeUi();
+        if (emitChange && prev !== nextMode) {
+          showToast(nextMode === '3d' ? '3D Sovereign Engine Mode — drag to orbit' : 'Movie 2.39:1 CinemaScope Mode active');
+          FractalBrain.emit('mode:changed', { viewMode: nextMode, previousViewMode: prev });
+        }
+      }
+
+      function setStreamMode(nextMode, emitChange) {
+        if (nextMode !== 'stream' && nextMode !== 'subtract') return;
+        const prev = kernel.streamMode;
+        kernel.streamMode = nextMode;
+        syncModeUi();
+        if (emitChange && prev !== nextMode) {
+          showToast(nextMode === 'subtract' ? 'Subtract optical mode active' : 'Stream projection mode active');
+          FractalBrain.emit('STREAM_MODE_CHANGED', { streamMode: nextMode });
+        }
+      }
+
+      function setLiquid8k(enabled, emitChange) {
+        const next = Boolean(enabled);
+        const prev = kernel.liquid8kEnabled;
+        kernel.liquid8kEnabled = next;
+        syncLiquid8kUi();
+        if (next) renderLiquid8kPass(kernel.elapsed);
+        if (emitChange && prev !== next) {
+          showToast(next ? 'Liquid 8K upscaling ON' : 'Liquid 8K upscaling OFF');
+          FractalBrain.emit('LIQUID_8K_CHANGED', { enabled: next });
+        }
+      }
+
+      function setTheatreView(enabled, emitChange) {
+        const next = Boolean(enabled);
+        const prev = kernel.theatreView;
+        kernel.theatreView = next;
+        syncTheatreUi();
+        if (emitChange && prev !== next) {
+          showToast(next ? 'Theatre View ON' : 'Theatre View OFF');
+          FractalBrain.emit('THEATRE_VIEW_CHANGED', { theatreView: next });
+        }
+      }
+
+      function syncScopeMattes() {
+        const topBarH = 44;
+        const w = window.innerWidth || 1280;
+        const h = window.innerHeight || 720;
+        const availH = Math.max(120, h - topBarH);
+        const scope239H = w / 2.39;
+        const extraTheatre = kernel.theatreView ? 22 : 0;
+
+        let matteH = 0;
+        if (kernel.viewMode === 'movie' && kernel.scopeEnabled && availH > scope239H) {
+          matteH = Math.min(
+            Math.floor(availH * 0.42),
+            Math.max(0, Math.floor((availH - scope239H) / 2) + extraTheatre)
+          );
+        } else if (kernel.viewMode === 'movie' && kernel.theatreView) {
+          matteH = Math.min(36, Math.floor(availH * 0.08));
+        }
+
+        document.documentElement.style.setProperty('--matte-h', `${matteH}px`);
+        document.body.classList.toggle('scope-on', kernel.viewMode === 'movie' && (kernel.scopeEnabled || kernel.theatreView) && matteH > 0);
+
+        const scopeTopBtn = document.getElementById('scopeTopBtn');
+        if (scopeTopBtn) {
+          scopeTopBtn.setAttribute('aria-pressed', String(kernel.scopeEnabled));
+          scopeTopBtn.textContent = kernel.scopeEnabled ? '2.39:1: ON' : '2.39:1: OFF';
+          scopeTopBtn.classList.toggle('active-gold', kernel.scopeEnabled);
+        }
+      }
+
+      function syncMediaTransform() {
+        const wrap = document.getElementById('scope-media-wrap');
+        if (!wrap) return;
+        const scaleX = kernel.squeeze239 ? 1.18 : 1.0;
+        const scaleY = kernel.squeeze239 ? 0.94 : 1.0;
+        wrap.style.transform = `scale(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)})`;
+
+        const squeezeBtn = document.getElementById('squeezeBtn');
+        if (squeezeBtn) {
+          squeezeBtn.setAttribute('aria-pressed', String(kernel.squeeze239));
+          squeezeBtn.textContent = kernel.squeeze239 ? '2.39x Squeeze: ON' : '2.39x Squeeze: OFF';
+          squeezeBtn.classList.toggle('on-cyan', kernel.squeeze239);
+        }
+      }
+
+      function syncModeUi() {
+        const isSubtract = kernel.streamMode === 'subtract';
+        document.body.classList.toggle('mode-subtract', isSubtract);
+        document.body.classList.toggle('mode-stream', !isSubtract);
+
+        const btn = document.getElementById('streamSubtractBtn');
+        if (btn) {
+          btn.setAttribute('aria-pressed', String(isSubtract));
+          btn.textContent = isSubtract ? 'Mode: Subtract' : 'Mode: Stream';
+          btn.classList.toggle('on-emerald', !isSubtract);
+          btn.classList.toggle('on-violet', isSubtract);
+        }
+        updateBrainBadge();
+      }
+
+      function syncLiquid8kUi() {
+        document.body.classList.toggle('liquid8k-on', kernel.liquid8kEnabled);
+        const btn = document.getElementById('liquid8kBtn');
+        if (btn) {
+          btn.setAttribute('aria-pressed', String(kernel.liquid8kEnabled));
+          btn.textContent = kernel.liquid8kEnabled ? 'Liquid 8K: ON' : 'Liquid 8K: OFF';
+          btn.classList.toggle('on-cyan', kernel.liquid8kEnabled);
+        }
+      }
+
+      function syncTheatreUi() {
+        document.body.classList.toggle('theatre-on', kernel.theatreView);
+
+        const topBtn = document.getElementById('theatreTopBtn');
+        if (topBtn) {
+          topBtn.setAttribute('aria-pressed', String(kernel.theatreView));
+          topBtn.textContent = kernel.theatreView ? 'THEATRE: ON' : 'THEATRE: OFF';
+          topBtn.classList.toggle('active-rose', kernel.theatreView);
+        }
+
+        const pillBtn = document.getElementById('theatrePillBtn');
+        if (pillBtn) {
+          pillBtn.setAttribute('aria-pressed', String(kernel.theatreView));
+          pillBtn.textContent = kernel.theatreView ? 'Theatre: ON' : 'Theatre View';
+          pillBtn.classList.toggle('on-rose', kernel.theatreView);
+        }
+
+        syncScopeMattes();
+      }
+
+      function syncPlaybackUi() {
+        const playBtn = document.getElementById('playPauseBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const metaEl = document.getElementById('mediaLabel');
+
+        if (playBtn) {
+          if (kernel.media.type === 'image') {
+            playBtn.textContent = 'Still';
+          } else {
+            playBtn.textContent = kernel.media.playing ? 'Pause' : 'Play';
+          }
+        }
+        if (muteBtn) {
+          muteBtn.textContent = kernel.media.muted ? 'Unmute' : 'Mute';
+          muteBtn.classList.toggle('on-amber', !kernel.media.muted);
+        }
+        if (metaEl) {
+          metaEl.textContent = kernel.media.name || (kernel.viewMode === '3d' ? '3D_Origin_000' : '239_stream.mp4');
+        }
+      }
+
+      function releaseObjectUrl() {
+        if (kernel.media.objectUrl) {
+          try { URL.revokeObjectURL(kernel.media.objectUrl); } catch (_) {}
+          kernel.media.objectUrl = '';
+        }
+      }
+
+      function activateMediaStage(type, name) {
+        kernel.media.loaded = true;
+        kernel.media.type = type;
+        kernel.media.name = name || 'reel.mp4';
+        document.body.classList.add('has-media');
+
+        videoEl.style.display = type === 'video' ? 'block' : 'none';
+        imageEl.style.display = type === 'image' ? 'block' : 'none';
+        streamCanvas.style.display = type === 'stream' ? 'block' : 'none';
+
+        syncViewModeUi();
+        syncScopeMattes();
+        syncMediaTransform();
+        syncPlaybackUi();
+        renderLiquid8kPass(kernel.elapsed);
+      }
+
+      function launchBuiltInStream() {
+        releaseObjectUrl();
+        try { videoEl.pause(); } catch (_) {}
+        videoEl.removeAttribute('src');
+        kernel.media.playing = true;
+        activateMediaStage('stream', 'CinemaScope_239_Stream.mp4');
+        renderStreamFrame(kernel.elapsed);
+        renderLiquid8kPass(kernel.elapsed);
+        showToast('Streaming 2.39:1 CinemaScope reel');
+        FractalBrain.emit('MEDIA_LOADED', { type: 'stream', name: kernel.media.name });
+      }
+
+      function loadUserFile(file) {
+        if (!file) return;
+        releaseObjectUrl();
+        const url = URL.createObjectURL(file);
+        kernel.media.objectUrl = url;
+        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
+
+        if (isImage) {
+          try { videoEl.pause(); } catch (_) {}
+          videoEl.removeAttribute('src');
+          imageEl.onload = function () {
+            kernel.media.playing = false;
+            activateMediaStage('image', file.name);
+            renderLiquid8kPass(kernel.elapsed);
+            showToast(`Projected image: ${file.name}`);
+            FractalBrain.emit('MEDIA_LOADED', { type: 'image', name: file.name });
+          };
+          imageEl.src = url;
+          return;
+        }
+
+        videoEl.muted = kernel.media.muted;
+        videoEl.src = url;
+        videoEl.load();
+        const tryPlay = function () {
+          const p = videoEl.play();
+          if (p && typeof p.then === 'function') {
+            p.then(function () {
+              kernel.media.playing = true;
+              activateMediaStage('video', file.name);
+              showToast(`Streaming MP4: ${file.name}`);
+              FractalBrain.emit('MEDIA_LOADED', { type: 'video', name: file.name });
+            }).catch(function () {
+              kernel.media.playing = false;
+              activateMediaStage('video', file.name);
+              showToast(`Loaded ${file.name} — tap Play`);
+              FractalBrain.emit('MEDIA_LOADED', { type: 'video', name: file.name });
+            });
+          } else {
+            kernel.media.playing = !videoEl.paused;
+            activateMediaStage('video', file.name);
+            FractalBrain.emit('MEDIA_LOADED', { type: 'video', name: file.name });
+          }
+        };
+        videoEl.onloadedmetadata = tryPlay;
+        videoEl.onerror = function () {
+          showToast('Could not decode video file; switched to 2.39:1 stream');
+          launchBuiltInStream();
+        };
+      }
+
+      function getActiveMediaSource() {
+        if (!kernel.media.loaded) return null;
+        if (kernel.media.type === 'video' && videoEl.readyState >= 2) return videoEl;
+        if (kernel.media.type === 'image' && imageEl.complete && imageEl.naturalWidth > 0) return imageEl;
+        if (kernel.media.type === 'stream') return streamCanvas;
+        return null;
+      }
+
+      // Built-in procedural 2.39:1 CinemaScope stream renderer
+      function renderStreamFrame(t) {
+        const w = streamCanvas.width;
+        const h = streamCanvas.height;
+        const grad = streamCtx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#071326');
+        grad.addColorStop(0.5, '#132342');
+        grad.addColorStop(1, '#26132b');
+        streamCtx.fillStyle = grad;
+        streamCtx.fillRect(0, 0, w, h);
+
+        const cx = w * 0.5;
+        const cy = h * 0.5;
+        for (let i = 0; i < 12; i++) {
+          const angle = (i / 12) * Math.PI * 2 + t * 0.45;
+          const len = 140 + Math.sin(t * 1.4 + i) * 32;
+          streamCtx.save();
+          streamCtx.translate(cx, cy);
+          streamCtx.rotate(angle);
+          const rayGrad = streamCtx.createLinearGradient(0, 0, len, 0);
+          rayGrad.addColorStop(0, 'rgba(251, 191, 36, 0.55)');
+          rayGrad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+          streamCtx.strokeStyle = rayGrad;
+          streamCtx.lineWidth = 2.2;
+          streamCtx.beginPath();
+          streamCtx.moveTo(0, 0);
+          streamCtx.lineTo(len, 0);
+          streamCtx.stroke();
+          streamCtx.restore();
+        }
+
+        const flareX = cx + Math.sin(t * 0.8) * (w * 0.22);
+        const flareGrad = streamCtx.createRadialGradient(flareX, cy, 4, flareX, cy, 240);
+        flareGrad.addColorStop(0, 'rgba(254, 240, 138, 0.45)');
+        flareGrad.addColorStop(0.45, 'rgba(56, 189, 248, 0.16)');
+        flareGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        streamCtx.fillStyle = flareGrad;
+        streamCtx.fillRect(0, 0, w, h);
+
+        streamCtx.fillStyle = 'rgba(241, 245, 249, 0.78)';
+        streamCtx.font = '600 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+        streamCtx.fillText(`FRACTALOS // 2.39:1 ANAMORPHIC STREAM   T+${t.toFixed(1)}s`, 20, 26);
+      }
+
+      // Natural Liquid 8K upscaling pass onto high-res 2.39:1 canvas
+      function renderLiquid8kPass(t) {
+        if (!kernel.liquid8kEnabled || !kernel.media.loaded) return;
+
+        const targetW = Math.min(2560, Math.max(1280, Math.round((window.innerWidth || 1280) * 1.5)));
+        const targetH = Math.max(536, Math.round(targetW / 2.39));
+        if (liquid8kCanvas.width !== targetW || liquid8kCanvas.height !== targetH) {
+          liquid8kCanvas.width = targetW;
+          liquid8kCanvas.height = targetH;
+        }
+
+        const source = getActiveMediaSource();
+        if (!source) return;
+
+        liquid8kCtx.save();
+        liquid8kCtx.imageSmoothingEnabled = true;
+        liquid8kCtx.imageSmoothingQuality = 'high';
+        liquid8kCtx.drawImage(source, 0, 0, targetW, targetH);
+
+        liquid8kCtx.save();
+        liquid8kCtx.globalAlpha = 0.28;
+        const shiftX = Math.sin(t * 1.8) * 2;
+        const shiftY = Math.cos(t * 1.4) * 1;
+        liquid8kCtx.drawImage(prevFrameCanvas, shiftX, shiftY, targetW, targetH);
+        liquid8kCtx.restore();
+
+        liquid8kCtx.save();
+        liquid8kCtx.globalCompositeOperation = 'soft-light';
+        liquid8kCtx.globalAlpha = 0.18;
+        liquid8kCtx.drawImage(source, -1, 0, targetW + 2, targetH);
+        liquid8kCtx.restore();
+        liquid8kCtx.restore();
+
+        prevFrameCtx.clearRect(0, 0, prevFrameCanvas.width, prevFrameCanvas.height);
+        prevFrameCtx.drawImage(liquid8kCanvas, 0, 0, prevFrameCanvas.width, prevFrameCanvas.height);
+      }
+
+      // -----------------------------------------------------------------------
+      // 4. 3D MULTIPLIED CONE SYSTEM (ORIGIN 0,0,0) & MOVIE BACKGROUND SCENE
+      // -----------------------------------------------------------------------
+      function resizeBgCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = Math.max(1, window.innerWidth || 1280);
+        const h = Math.max(1, window.innerHeight || 720);
+        if (bgCanvas.width !== Math.round(w * dpr) || bgCanvas.height !== Math.round(h * dpr)) {
+          bgCanvas.width = Math.round(w * dpr);
+          bgCanvas.height = Math.round(h * dpr);
+        }
+        return { dpr, w, h };
+      }
+
+      // Project 3D point (x,y,z) around origin (0,0,0) to 2D viewport coordinates
+      function project3D(x, y, z, cx, cy, focal) {
+        const cosY = Math.cos(kernel.cones.yaw);
+        const sinY = Math.sin(kernel.cones.yaw);
+        const x1 = x * cosY - z * sinY;
+        const z1 = x * sinY + z * cosY;
+
+        const cosP = Math.cos(kernel.cones.pitch);
+        const sinP = Math.sin(kernel.cones.pitch);
+        const y2 = y * cosP - z1 * sinP;
+        const z2 = y * sinP + z1 * cosP;
+
+        const depth = Math.max(120, focal + z2);
+        const scale = (focal / depth) * kernel.cones.zoom;
+        return {
+          sx: cx + kernel.cones.panX + x1 * scale,
+          sy: cy + kernel.cones.panY - y2 * scale,
+          scale,
+          z: z2,
+        };
+      }
+
+      function renderBackgroundScene(dt) {
+        const { dpr, w, h } = resizeBgCanvas();
+        const is3d = kernel.viewMode === '3d';
+        bgCtx.save();
+        bgCtx.scale(dpr, dpr);
+
+        bgCtx.fillStyle = kernel.theatreView ? '#05040a' : '#040711';
+        bgCtx.fillRect(0, 0, w, h);
+
+        const dir = kernel.streamMode === 'subtract' ? -1 : 1;
+        kernel.cones.phase += dt * (is3d ? 0.95 : 0.65) * dir;
+        if (!is3d && !isPointerOrbiting) {
+          kernel.cones.yaw += dt * 0.14;
+        }
+
+        const cx = w * 0.5;
+        const cy = h * (is3d ? 0.52 : 0.54);
+        const focal = Math.min(w, h) * 0.95;
+        const baseRadius = Math.min(w, h) * (is3d ? 0.34 : 0.25) * kernel.cones.scale;
+        const spreadRad = (kernel.cones.spreadDeg * Math.PI) / 180;
+
+        // 3D origin axes & reference rings in 3D Mode
+        if (is3d) {
+          const originPt = project3D(0, 0, 0, cx, cy, focal);
+          const xAxisEnd = project3D(baseRadius * 1.15, 0, 0, cx, cy, focal);
+          const yAxisEnd = project3D(0, baseRadius * 0.95, 0, cx, cy, focal);
+          const zAxisEnd = project3D(0, 0, baseRadius * 1.15, cx, cy, focal);
+
+          bgCtx.lineWidth = 1.25;
+          // X axis (amber)
+          bgCtx.strokeStyle = 'rgba(251, 191, 36, 0.38)';
+          bgCtx.beginPath();
+          bgCtx.moveTo(originPt.sx, originPt.sy);
+          bgCtx.lineTo(xAxisEnd.sx, xAxisEnd.sy);
+          bgCtx.stroke();
+          // Y axis (emerald)
+          bgCtx.strokeStyle = 'rgba(52, 211, 153, 0.38)';
+          bgCtx.beginPath();
+          bgCtx.moveTo(originPt.sx, originPt.sy);
+          bgCtx.lineTo(yAxisEnd.sx, yAxisEnd.sy);
+          bgCtx.stroke();
+          // Z axis (cyan)
+          bgCtx.strokeStyle = 'rgba(56, 189, 248, 0.38)';
+          bgCtx.beginPath();
+          bgCtx.moveTo(originPt.sx, originPt.sy);
+          bgCtx.lineTo(zAxisEnd.sx, zAxisEnd.sy);
+          bgCtx.stroke();
+
+          // Origin equatorial ring
+          bgCtx.strokeStyle = 'rgba(148, 184, 224, 0.14)';
+          bgCtx.lineWidth = 1;
+          bgCtx.beginPath();
+          const ringSegs = 48;
+          for (let s = 0; s <= ringSegs; s++) {
+            const a = (s / ringSegs) * Math.PI * 2;
+            const p = project3D(Math.cos(a) * baseRadius * 0.85, 0, Math.sin(a) * baseRadius * 0.85, cx, cy, focal);
+            if (s === 0) bgCtx.moveTo(p.sx, p.sy);
+            else bgCtx.lineTo(p.sx, p.sy);
+          }
+          bgCtx.stroke();
+        }
+
+        // Multiplied 3D cones anchored at origin (0,0,0)
+        const n = kernel.cones.count;
+        const coneItems = [];
+        for (let i = 0; i < n; i++) {
+          const theta = (i / n) * Math.PI * 2 + kernel.cones.phase;
+          const elev = Math.sin(theta * 2 + kernel.cones.phase * 0.7) * (is3d ? 0.42 : 0.16);
+          const pulse = 0.86 + 0.18 * Math.sin(kernel.cones.phase * 2.2 + i);
+          const coneLen = baseRadius * pulse;
+          const halfAngle = Math.max(0.09, spreadRad * 0.25);
+
+          const tip = project3D(0, 0, 0, cx, cy, focal);
+          const rimLeft = project3D(
+            Math.cos(theta - halfAngle) * Math.cos(elev) * coneLen,
+            Math.sin(elev) * coneLen,
+            Math.sin(theta - halfAngle) * Math.cos(elev) * coneLen,
+            cx, cy, focal
+          );
+          const rimRight = project3D(
+            Math.cos(theta + halfAngle) * Math.cos(elev) * coneLen,
+            Math.sin(elev) * coneLen,
+            Math.sin(theta + halfAngle) * Math.cos(elev) * coneLen,
+            cx, cy, focal
+          );
+
+          coneItems.push({
+            index: i,
+            tip,
+            rimLeft,
+            rimRight,
+            avgZ: (tip.z + rimLeft.z + rimRight.z) / 3,
+          });
+        }
+
+        // Painter's depth sort so front cones layer cleanly
+        coneItems.sort(function (a, b) { return b.avgZ - a.avgZ; });
+
+        for (let k = 0; k < coneItems.length; k++) {
+          const item = coneItems[k];
+          const i = item.index;
+          bgCtx.beginPath();
+          bgCtx.moveTo(item.tip.sx, item.tip.sy);
+          bgCtx.lineTo(item.rimLeft.sx, item.rimLeft.sy);
+          bgCtx.lineTo(item.rimRight.sx, item.rimRight.sy);
+          bgCtx.closePath();
+
+          const alphaBoost = is3d ? 1.35 : 0.85;
+          if (kernel.streamMode === 'subtract') {
+            bgCtx.fillStyle = i % 2 === 0
+              ? `rgba(192, 132, 252, ${(0.11 * alphaBoost).toFixed(3)})`
+              : `rgba(56, 189, 248, ${(0.08 * alphaBoost).toFixed(3)})`;
+            bgCtx.strokeStyle = i % 2 === 0 ? 'rgba(192, 132, 252, 0.42)' : 'rgba(56, 189, 248, 0.28)';
+          } else {
+            bgCtx.fillStyle = i % 2 === 0
+              ? `rgba(251, 191, 36, ${(0.10 * alphaBoost).toFixed(3)})`
+              : `rgba(56, 189, 248, ${(0.09 * alphaBoost).toFixed(3)})`;
+            bgCtx.strokeStyle = i % 2 === 0 ? 'rgba(251, 191, 36, 0.36)' : 'rgba(56, 189, 248, 0.28)';
+          }
+          bgCtx.fill();
+          bgCtx.lineWidth = is3d ? 1.35 : 1.05;
+          bgCtx.stroke();
+        }
+
+        // In 3D Mode, project active media/stream onto a 3D 2.39:1 CinemaScope screen plane
+        const activeMedia = getActiveMediaSource();
+        if (is3d && activeMedia) {
+          const screenW = Math.min(w * 0.44, 440) * kernel.cones.zoom;
+          const screenH = screenW / (kernel.squeeze239 ? 2.39 : 1.85);
+          const zScreen = -baseRadius * 0.65;
+          const tl = project3D(-screenW * 0.5, screenH * 0.5, zScreen, cx, cy, focal);
+          const tr = project3D(screenW * 0.5, screenH * 0.5, zScreen, cx, cy, focal);
+          const br = project3D(screenW * 0.5, -screenH * 0.5, zScreen, cx, cy, focal);
+          const bl = project3D(-screenW * 0.5, -screenH * 0.5, zScreen, cx, cy, focal);
+
+          const minX = Math.min(tl.sx, tr.sx, br.sx, bl.sx);
+          const maxX = Math.max(tl.sx, tr.sx, br.sx, bl.sx);
+          const minY = Math.min(tl.sy, tr.sy, br.sy, bl.sy);
+          const maxY = Math.max(tl.sy, tr.sy, br.sy, bl.sy);
+          const boxW = Math.max(40, maxX - minX);
+          const boxH = Math.max(24, maxY - minY);
+
+          bgCtx.save();
+          bgCtx.beginPath();
+          bgCtx.roundRect(minX, minY, boxW, boxH, 10);
+          bgCtx.clip();
+          if (kernel.streamMode === 'subtract') {
+            bgCtx.filter = 'contrast(1.22) saturate(1.15) hue-rotate(-14deg)';
+          }
+          bgCtx.drawImage(activeMedia, minX, minY, boxW, boxH);
+          bgCtx.restore();
+
+          bgCtx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+          bgCtx.lineWidth = 1.4;
+          bgCtx.beginPath();
+          bgCtx.roundRect(minX, minY, boxW, boxH, 10);
+          bgCtx.stroke();
+        }
+
+        // Origin (0,0,0) core beacon
+        const originCore = project3D(0, 0, 0, cx, cy, focal);
+        bgCtx.beginPath();
+        bgCtx.arc(originCore.sx, originCore.sy, is3d ? 7.5 : 5.5, 0, Math.PI * 2);
+        bgCtx.fillStyle = kernel.streamMode === 'subtract' ? '#c084fc' : '#fbbf24';
+        bgCtx.fill();
+
+        // Compact 3D telemetry caption in top-left of 3D view
+        if (is3d) {
+          bgCtx.fillStyle = 'rgba(226, 232, 240, 0.82)';
+          bgCtx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, monospace';
+          bgCtx.fillText(
+            `3D ORIGIN (0,0,0) • N=${kernel.cones.count} • ${kernel.modeId} • ΔT ${(kernel.tOut - kernel.tIn).toFixed(1)}°C`,
+            14,
+            64
+          );
+        }
+
+        bgCtx.restore();
+      }
+
+      // Interactive 3D Orbit / Zoom / Pan on background canvas when in 3D Mode
+      let isPointerOrbiting = false;
+      let isPointerPanning = false;
+      let lastPtrX = 0;
+      let lastPtrY = 0;
+
+      bgCanvas.addEventListener('pointerdown', function (e) {
+        if (kernel.viewMode !== '3d') return;
+        isPointerOrbiting = e.button !== 2 && !e.shiftKey;
+        isPointerPanning = e.button === 2 || e.shiftKey;
+        lastPtrX = e.clientX;
+        lastPtrY = e.clientY;
+        try { bgCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+
+      bgCanvas.addEventListener('pointermove', function (e) {
+        if (kernel.viewMode !== '3d' || (!isPointerOrbiting && !isPointerPanning)) return;
+        const dx = e.clientX - lastPtrX;
+        const dy = e.clientY - lastPtrY;
+        lastPtrX = e.clientX;
+        lastPtrY = e.clientY;
+        if (isPointerOrbiting) {
+          kernel.cones.yaw += dx * 0.008;
+          kernel.cones.pitch = Math.max(-1.25, Math.min(1.25, kernel.cones.pitch + dy * 0.008));
+        } else if (isPointerPanning) {
+          kernel.cones.panX += dx;
+          kernel.cones.panY += dy;
+        }
+      });
+
+      function endPointerDrag(e) {
+        isPointerOrbiting = false;
+        isPointerPanning = false;
+        if (e && e.pointerId !== undefined) {
+          try { bgCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      }
+      bgCanvas.addEventListener('pointerup', endPointerDrag);
+      bgCanvas.addEventListener('pointercancel', endPointerDrag);
+      bgCanvas.addEventListener('contextmenu', function (e) {
+        if (kernel.viewMode === '3d') e.preventDefault();
+      });
+      bgCanvas.addEventListener('wheel', function (e) {
+        if (kernel.viewMode !== '3d') return;
+        e.preventDefault();
+        const factor = e.deltaY > 0 ? 0.92 : 1.08;
+        kernel.cones.zoom = Math.max(0.45, Math.min(2.6, kernel.cones.zoom * factor));
+      }, { passive: false });
+
+      // -----------------------------------------------------------------------
+      // 5. EVENT LISTENERS, KEYBOARD SHORTCUTS & SELF-HEALING LOOP
+      // -----------------------------------------------------------------------
+      function bindEvents() {
+        const fileInput = document.getElementById('mediaFileInput');
+        const openPicker = function () {
+          if (fileInput) fileInput.click();
+        };
+
+        document.getElementById('loadTopBtn').addEventListener('click', openPicker);
+        document.getElementById('pickFileBtn').addEventListener('click', openPicker);
+        document.getElementById('changeFileBtn').addEventListener('click', openPicker);
+        document.getElementById('launchStreamBtn').addEventListener('click', launchBuiltInStream);
+
+        document.getElementById('movieModeTopBtn').addEventListener('click', function () {
+          setViewMode('movie', true);
+        });
+        document.getElementById('threeDModeTopBtn').addEventListener('click', function () {
+          setViewMode('3d', true);
+        });
+        document.getElementById('viewModeCycleBtn').addEventListener('click', function () {
+          setViewMode(kernel.viewMode === 'movie' ? '3d' : 'movie', true);
+        });
+
+        fileInput.addEventListener('change', function (e) {
+          const file = e.target.files && e.target.files[0];
+          if (file) loadUserFile(file);
+          e.target.value = '';
+        });
+
+        const dropCard = document.getElementById('dropCard');
+        window.addEventListener('dragover', function (e) {
+          e.preventDefault();
+          if (dropCard) dropCard.classList.add('drag-over');
+        });
+        window.addEventListener('dragleave', function (e) {
+          if (!e.relatedTarget && dropCard) dropCard.classList.remove('drag-over');
+        });
+        window.addEventListener('drop', function (e) {
+          e.preventDefault();
+          if (dropCard) dropCard.classList.remove('drag-over');
+          const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+          if (file) {
+            loadUserFile(file);
+          }
+        });
+
+        const togglePlayPause = function () {
+          if (!kernel.media.loaded || kernel.media.type === 'image') return;
+          if (kernel.media.type === 'stream') {
+            kernel.media.playing = !kernel.media.playing;
+            syncPlaybackUi();
+            FractalBrain.emit(kernel.media.playing ? 'PLAYBACK_RESUMED' : 'PLAYBACK_PAUSED', {});
+            return;
+          }
+          if (videoEl.paused) {
+            videoEl.play().then(function () {
+              kernel.media.playing = true;
+              syncPlaybackUi();
+              FractalBrain.emit('PLAYBACK_RESUMED', {});
+            }).catch(function () {
+              showToast('Tap again to play video');
+            });
+          } else {
+            videoEl.pause();
+            kernel.media.playing = false;
+            syncPlaybackUi();
+            FractalBrain.emit('PLAYBACK_PAUSED', {});
+          }
+        };
+
+        document.getElementById('playPauseBtn').addEventListener('click', togglePlayPause);
+
+        document.getElementById('muteBtn').addEventListener('click', function () {
+          kernel.media.muted = !kernel.media.muted;
+          videoEl.muted = kernel.media.muted;
+          syncPlaybackUi();
+          FractalBrain.emit('AUDIO_MUTE_CHANGED', { muted: kernel.media.muted });
+        });
+
+        document.getElementById('squeezeBtn').addEventListener('click', function () {
+          kernel.squeeze239 = !kernel.squeeze239;
+          syncMediaTransform();
+          FractalBrain.emit('SQUEEZE_CHANGED', { squeeze239: kernel.squeeze239 });
+        });
+
+        document.getElementById('streamSubtractBtn').addEventListener('click', function () {
+          kernel.streamMode = kernel.streamMode === 'stream' ? 'subtract' : 'stream';
+          syncModeUi();
+          showToast(kernel.streamMode === 'subtract' ? 'Subtract optical mode active' : 'Stream projection mode active');
+          FractalBrain.emit('STREAM_MODE_CHANGED', { streamMode: kernel.streamMode });
+        });
+
+        document.getElementById('liquid8kBtn').addEventListener('click', function () {
+          kernel.liquid8kEnabled = !kernel.liquid8kEnabled;
+          syncLiquid8kUi();
+          renderLiquid8kPass(kernel.elapsed);
+          showToast(kernel.liquid8kEnabled ? 'Liquid 8K upscaling ON' : 'Liquid 8K upscaling OFF');
+          FractalBrain.emit('LIQUID_8K_CHANGED', { enabled: kernel.liquid8kEnabled });
+        });
+
+        const toggleTheatre = function () {
+          kernel.theatreView = !kernel.theatreView;
+          syncTheatreUi();
+          showToast(kernel.theatreView ? 'Theatre View ON' : 'Theatre View OFF');
+          FractalBrain.emit('THEATRE_VIEW_CHANGED', { theatreView: kernel.theatreView });
+        };
+        document.getElementById('theatreTopBtn').addEventListener('click', toggleTheatre);
+        document.getElementById('theatrePillBtn').addEventListener('click', toggleTheatre);
+
+        document.getElementById('scopeTopBtn').addEventListener('click', function () {
+          kernel.scopeEnabled = !kernel.scopeEnabled;
+          syncScopeMattes();
+          FractalBrain.emit('SCOPE_MATTES_CHANGED', { scopeEnabled: kernel.scopeEnabled });
+        });
+
+        window.addEventListener('keydown', function (e) {
+          const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+          if (tag === 'input' || tag === 'textarea' || e.metaKey || e.ctrlKey || e.altKey) return;
+          if (e.key === '1' || e.key.toLowerCase() === 'm') {
+            setViewMode('movie', true);
+          } else if (e.key === '2' || e.key === '3') {
+            setViewMode('3d', true);
+          } else if (e.code === 'Space') {
+            e.preventDefault();
+            togglePlayPause();
+          }
+        });
+
+        window.addEventListener('resize', function () {
+          syncScopeMattes();
+          renderBackgroundScene(0);
+          renderLiquid8kPass(kernel.elapsed);
+        });
+      }
+
+      let telemetryAccum = 0;
+
+      function tickFrame(now) {
+        const rawDt = (now - kernel.lastFrameTime) / 1000;
+        kernel.lastFrameTime = now;
+        const dt = Math.max(0.001, Math.min(rawDt, 0.05));
+
+        kernel.elapsed += dt;
+        kernel.frameCount += 1;
+        kernel.lastRenderTick = performance.now();
+
+        const targetFlow = (kernel.pwm / 100) * 7.2;
+        kernel.flow += (targetFlow - kernel.flow) * Math.min(1, dt * 3);
+        kernel.tOut += (((kernel.flux * 0.032) + kernel.tIn) - kernel.tOut) * Math.min(1, dt * 0.4);
+
+        renderBackgroundScene(dt);
+
+        if (kernel.media.loaded) {
+          if (kernel.media.type === 'stream' && kernel.media.playing) {
+            renderStreamFrame(kernel.elapsed);
+          }
+          if (kernel.liquid8kEnabled && kernel.viewMode === 'movie') {
+            renderLiquid8kPass(kernel.elapsed);
+          }
+        }
+
+        telemetryAccum += dt;
+        if (telemetryAccum >= 0.35) {
+          telemetryAccum = 0;
+          const snap = snapshotBrainState();
+          for (const app of fusedRegistry.values()) {
+            if (app.onTelemetry) {
+              try { app.onTelemetry(snap); } catch (_) {}
+            }
+          }
+        }
+
+        window.requestAnimationFrame(tickFrame);
+      }
+
+      // Immediate first-frame render & UI initialization
+      syncViewModeUi();
+      syncModeUi();
+      syncLiquid8kUi();
+      syncTheatreUi();
+      syncScopeMattes();
+      syncMediaTransform();
+      syncPlaybackUi();
+      updateBrainBadge();
+      bindEvents();
+
+      renderBackgroundScene(0.016);
+      kernel.lastRenderTick = performance.now();
+
+      // Self-healing startup watchdog: guarantees rendering even if rAF is throttled
+      setInterval(function () {
+        const sinceLast = performance.now() - kernel.lastRenderTick;
+        if (sinceLast > 1200) {
+          renderBackgroundScene(0.05);
+          if (kernel.media.loaded && kernel.media.type === 'stream') {
+            renderStreamFrame(kernel.elapsed);
+          }
+          if (kernel.media.loaded && kernel.liquid8kEnabled && kernel.viewMode === 'movie') {
+            renderLiquid8kPass(kernel.elapsed);
+          }
+          kernel.lastRenderTick = performance.now();
+        }
+      }, 600);
+
+      window.requestAnimationFrame(tickFrame);
+    })();
+  </script>
+</body>
+</html>
